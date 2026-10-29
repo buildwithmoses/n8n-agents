@@ -1,0 +1,289 @@
+{
+  "_doc": "Fernhill lead routing rules. Owned by Dana Whitlock (Head of Sales). Code reads this file; the model never sees it and never decides routing.",
+  "segments": [
+    {
+      "name": "Starter",
+      "min_techs": 1,
+      "max_techs": 5
+    },
+    {
+      "name": "Pro",
+      "min_techs": 6,
+      "max_techs": 25
+    },
+    {
+      "name": "Enterprise",
+      "min_techs": 26,
+      "max_techs": 1000000
+    }
+  ],
+  "team_size_dropdown": {
+    "1-5": 3,
+    "6-25": 12,
+    "26-100": 50,
+    "100+": 150
+  },
+  "territories": {
+    "East": [
+      "ME",
+      "NH",
+      "VT",
+      "MA",
+      "RI",
+      "CT",
+      "NY",
+      "NJ",
+      "PA",
+      "DE",
+      "MD",
+      "DC",
+      "VA",
+      "WV",
+      "NC",
+      "SC",
+      "GA",
+      "FL"
+    ],
+    "Central": [
+      "OH",
+      "MI",
+      "IN",
+      "IL",
+      "WI",
+      "MN",
+      "IA",
+      "MO",
+      "KY",
+      "TN",
+      "AL",
+      "MS",
+      "LA",
+      "AR",
+      "OK",
+      "TX",
+      "KS",
+      "NE",
+      "SD",
+      "ND"
+    ],
+    "West": [
+      "MT",
+      "WY",
+      "CO",
+      "NM",
+      "AZ",
+      "UT",
+      "NV",
+      "ID",
+      "WA",
+      "OR",
+      "CA",
+      "AK",
+      "HI"
+    ]
+  },
+  "owners": [
+    {
+      "id": "own-ava",
+      "name": "Ava Brennan",
+      "slack": "@ava",
+      "territory": "East",
+      "segments": [
+        "Starter",
+        "Pro"
+      ],
+      "capacity": 40
+    },
+    {
+      "id": "own-jules",
+      "name": "Jules Moreno",
+      "slack": "@jules",
+      "territory": "East",
+      "segments": [
+        "Starter",
+        "Pro"
+      ],
+      "capacity": 40
+    },
+    {
+      "id": "own-tariq",
+      "name": "Tariq Nolan",
+      "slack": "@tariq",
+      "territory": "Central",
+      "segments": [
+        "Starter",
+        "Pro"
+      ],
+      "capacity": 40
+    },
+    {
+      "id": "own-mei",
+      "name": "Mei Calloway",
+      "slack": "@mei",
+      "territory": "Central",
+      "segments": [
+        "Starter",
+        "Pro"
+      ],
+      "capacity": 40
+    },
+    {
+      "id": "own-rhys",
+      "name": "Rhys Delgado",
+      "slack": "@rhys",
+      "territory": "West",
+      "segments": [
+        "Starter",
+        "Pro"
+      ],
+      "capacity": 40
+    },
+    {
+      "id": "own-noor",
+      "name": "Noor Ashby",
+      "slack": "@noor",
+      "territory": "West",
+      "segments": [
+        "Starter",
+        "Pro"
+      ],
+      "capacity": 40
+    },
+    {
+      "id": "own-gideon",
+      "name": "Gideon Park",
+      "slack": "@gideon",
+      "territory": "Any",
+      "segments": [
+        "Enterprise"
+      ],
+      "capacity": 15
+    },
+    {
+      "id": "own-celia",
+      "name": "Celia Fontaine",
+      "slack": "@celia",
+      "territory": "Any",
+      "segments": [
+        "Enterprise"
+      ],
+      "capacity": 15
+    }
+  ],
+  "approver": {
+    "name": "Dana Whitlock",
+    "slack": "@dana",
+    "id": "dana"
+  },
+  "icp": {
+    "core_trades": [
+      "hvac",
+      "plumbing",
+      "electrical"
+    ],
+    "adjacent_trades": [
+      "roofing",
+      "garage_door",
+      "pest_control",
+      "appliance_repair",
+      "landscaping",
+      "solar"
+    ],
+    "points": {
+      "core_trade": 40,
+      "adjacent_trade": 15,
+      "tech_fit": 20,
+      "timeline_now": 20,
+      "timeline_30": 15,
+      "timeline_90": 8,
+      "switching_from_competitor": 10,
+      "us_state": 5,
+      "business_email": 5
+    },
+    "tech_fit": {
+      "min": 2,
+      "max": 200
+    },
+    "tiers": {
+      "A": 70,
+      "B": 45
+    }
+  },
+  "competitors": {
+    "domains": [
+      "wrenchly.example",
+      "dispatchpro.example",
+      "fieldnimbus.example"
+    ],
+    "names": [
+      "wrenchly",
+      "dispatchpro",
+      "dispatch pro",
+      "fieldnimbus",
+      "field nimbus"
+    ]
+  },
+  "free_mail_domains": [
+    "gmail.example",
+    "yahoo.example",
+    "outlook.example",
+    "hotmail.example",
+    "icloud.example",
+    "gmail.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+    "icloud.com",
+    "aol.com"
+  ],
+  "student_domains_suffix": [
+    ".edu"
+  ],
+  "patterns": {
+    "spam": [
+      "backlink",
+      "\\bseo\\b.*(service|ranking|package)",
+      "guest post",
+      "crypto",
+      "bitcoin",
+      "forex",
+      "casino",
+      "viagra",
+      "loan offer",
+      "rank #?1 on google",
+      "web traffic"
+    ],
+    "student": [
+      "\\bstudent\\b",
+      "class project",
+      "\\bthesis\\b",
+      "\\bcapstone\\b",
+      "school (project|assignment)",
+      "\\bmy professor\\b"
+    ],
+    "job_seeker": [
+      "\\bresume\\b",
+      "\\bcv\\b",
+      "apply(ing)? for (a |the )?(job|position|role)",
+      "job opening",
+      "are you hiring",
+      "career opportunit",
+      "looking for (a )?(job|work|employment)",
+      "open (role|position)s?"
+    ],
+    "injection": [
+      "ignore (all |any )?(previous|prior|above|earlier) (instructions|rules)",
+      "disregard (the |your )?(instructions|rules)",
+      "system prompt",
+      "you are (an? )?(ai|assistant|language model)",
+      "as an ai",
+      "(assign|route) (this|me|the lead) (directly )?to",
+      "mark (this|me|the lead) as",
+      "set (the )?(priority|segment|owner|score)",
+      "override (the |your )?(rules|routing|instructions)",
+      "\\[\\[?system",
+      "new instructions",
+      "do not (tell|notify) (dana|anyone)"
+    ]
+  }
+}

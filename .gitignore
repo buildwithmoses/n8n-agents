@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.n8n-local.json
+workflows/*/.n8n-local.json
+node_modules/
+*.log
+workflows/*/workflow/.import.json
+workflows/*/evals/results/latest*.json
+mock/.state/
+.integ-logs/

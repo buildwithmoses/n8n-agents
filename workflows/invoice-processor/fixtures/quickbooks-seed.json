@@ -1,0 +1,23 @@
+{
+  "_note": "Fictional QuickBooks Online data for Fernhill Software. Served by mock.mjs. Bank numbers are made up.",
+  "vendors": [
+    { "id": "V-101", "name": "Brightline Cloud Hosting", "email_domain": "brightline-cloud.example", "bank": { "bank_name": "First Harbor Bank", "routing_number": "055501044", "account_number": "7700119021" } },
+    { "id": "V-102", "name": "Ridgeway Office Supply", "email_domain": "ridgewayoffice.example", "bank": { "bank_name": "Piedmont Trust", "routing_number": "055502210", "account_number": "4410028736" } },
+    { "id": "V-103", "name": "Calder & Finch LLP", "email_domain": "calderfinch.example", "bank": { "bank_name": "First Harbor Bank", "routing_number": "055503318", "account_number": "9020113345" } },
+    { "id": "V-104", "name": "Northpeak Marketing Co.", "email_domain": "northpeak.example", "bank": { "bank_name": "Blue Ridge Savings", "routing_number": "055504427", "account_number": "6631907714" } },
+    { "id": "V-105", "name": "Tallgrass Facilities", "email_domain": "tallgrassfacilities.example", "bank": { "bank_name": "Piedmont Trust", "routing_number": "055505536", "account_number": "3108842265" } },
+    { "id": "V-106", "name": "Copperline Telecom", "email_domain": "copperline.example", "bank": { "bank_name": "Triangle Commerce Bank", "routing_number": "055506645", "account_number": "5527710098" } },
+    { "id": "V-107", "name": "Vantage Recruiting Partners", "email_domain": "vantagerecruiting.example", "bank": { "bank_name": "First Harbor Bank", "routing_number": "055507754", "account_number": "8814460032" } }
+  ],
+  "purchase_orders": [
+    { "number": "PO-2291", "vendor_id": "V-101", "amount": 4812.50, "status": "open", "description": "Cloud hosting Q4" },
+    { "number": "PO-2298", "vendor_id": "V-104", "amount": 3300.00, "status": "open", "description": "Paid search + landing page, Oct" },
+    { "number": "PO-2304", "vendor_id": "V-103", "amount": 7950.00, "status": "open", "description": "Contract review + trademark filing" },
+    { "number": "PO-2310", "vendor_id": "V-107", "amount": 18500.00, "status": "open", "description": "Senior Backend Engineer placement" },
+    { "number": "PO-2315", "vendor_id": "V-103", "amount": 5000.00, "status": "open", "description": "Reseller agreement drafting (capped)" },
+    { "number": "PO-2320", "vendor_id": "V-101", "amount": 2600.00, "status": "open", "description": "GPU node, Oct" }
+  ],
+  "bills": [
+    { "id": "B-5001", "vendor_id": "V-106", "doc_number": "CT-88120", "txn_date": "2026-09-28", "total": 598.40, "status": "paid" }
+  ]
+}

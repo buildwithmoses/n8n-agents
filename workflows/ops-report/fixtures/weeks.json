@@ -1,0 +1,67 @@
+{
+  "_note": "Hand-set truth for 7 fictional weeks of Fernhill Software. mock.mjs builds raw API payloads (events, deals, tickets, issues, deployments) that add up to these numbers; the evals check the workflow's computed metrics against them. All data is made up.",
+  "weeks": {
+    "2026-W37": {
+      "stripe": { "mrr_end": 398400, "new_mrr": 6250, "expansion_mrr": 2100, "contraction_mrr": 450, "churned_mrr": 1200, "new_customers": 14, "churned_customers": 3 },
+      "hubspot": { "deals_created": 42, "pipeline_created_usd": 318000, "won_count": 11, "won_usd": 61200, "lost_count": 9 },
+      "zendesk": { "tickets": 212, "breaches": 9, "csat_good": 88, "csat_bad": 9 },
+      "linear": { "bugs_opened": 18, "bugs_closed": 16, "p0_opened": 0 },
+      "github": { "deploys": 31, "failed_deploys": 1 }
+    },
+    "2026-W38": {
+      "stripe": { "mrr_end": 404800, "new_mrr": 5800, "expansion_mrr": 1950, "contraction_mrr": 300, "churned_mrr": 1050, "new_customers": 13, "churned_customers": 3 },
+      "hubspot": { "deals_created": 45, "pipeline_created_usd": 334500, "won_count": 12, "won_usd": 66000, "lost_count": 10 },
+      "zendesk": { "tickets": 205, "breaches": 8, "csat_good": 92, "csat_bad": 8 },
+      "linear": { "bugs_opened": 17, "bugs_closed": 19, "p0_opened": 0 },
+      "github": { "deploys": 33, "failed_deploys": 1 }
+    },
+    "2026-W39": {
+      "stripe": { "mrr_end": 403350, "new_mrr": 5100, "expansion_mrr": 1400, "contraction_mrr": 600, "churned_mrr": 7350, "new_customers": 11, "churned_customers": 14 },
+      "hubspot": { "deals_created": 39, "pipeline_created_usd": 290250, "won_count": 10, "won_usd": 54800, "lost_count": 11 },
+      "zendesk": { "tickets": 231, "breaches": 11, "csat_good": 95, "csat_bad": 10 },
+      "linear": { "bugs_opened": 21, "bugs_closed": 18, "p0_opened": 1 },
+      "github": { "deploys": 29, "failed_deploys": 0 }
+    },
+    "2026-W40": {
+      "stripe": { "mrr_end": 410900, "new_mrr": 6900, "expansion_mrr": 2300, "contraction_mrr": 250, "churned_mrr": 1400, "new_customers": 15, "churned_customers": 4 },
+      "hubspot": { "deals_created": 47, "pipeline_created_usd": 352800, "won_count": 13, "won_usd": 72150, "lost_count": 9 },
+      "zendesk": { "tickets": 268, "breaches": 41, "csat_good": 81, "csat_bad": 24 },
+      "linear": { "bugs_opened": 19, "bugs_closed": 17, "p0_opened": 0 },
+      "github": { "deploys": 34, "failed_deploys": 2 }
+    },
+    "2026-W41": {
+      "stripe": { "mrr_end": 417300, "new_mrr": 6100, "expansion_mrr": 1800, "contraction_mrr": 350, "churned_mrr": 1150, "new_customers": 13, "churned_customers": 3 },
+      "hubspot": { "deals_created": 44, "pipeline_created_usd": 327600, "won_count": 12, "won_usd": 65400, "lost_count": 12 },
+      "zendesk": { "tickets": 219, "breaches": 10, "csat_good": 90, "csat_bad": 9 },
+      "linear": { "bugs_opened": 26, "bugs_closed": 15, "p0_opened": 2 },
+      "github": { "deploys": 30, "failed_deploys": 7 }
+    },
+    "2026-W42": {
+      "stripe": { "mrr_end": 423650, "new_mrr": 5950, "expansion_mrr": 2050, "contraction_mrr": 400, "churned_mrr": 1250, "new_customers": 13, "churned_customers": 3 },
+      "hubspot": { "deals_created": 46, "pipeline_created_usd": 341200, "won_count": 13, "won_usd": 70900, "lost_count": 10 },
+      "zendesk": { "tickets": 224, "breaches": 9, "csat_good": 91, "csat_bad": 8 },
+      "linear": { "bugs_opened": 18, "bugs_closed": 20, "p0_opened": 0 },
+      "github": { "deploys": 32, "failed_deploys": 1 }
+    },
+    "2026-W43": {
+      "stripe": { "mrr_end": 430650, "new_mrr": 6400, "expansion_mrr": 2200, "contraction_mrr": 300, "churned_mrr": 1300, "new_customers": 14, "churned_customers": 4 },
+      "hubspot": { "deals_created": 43, "pipeline_created_usd": 322400, "won_count": 11, "won_usd": 60500, "lost_count": 13 },
+      "zendesk": { "tickets": 210, "breaches": 8, "csat_good": 89, "csat_bad": 9 },
+      "linear": { "bugs_opened": 20, "bugs_closed": 22, "p0_opened": 0 },
+      "github": { "deploys": 35, "failed_deploys": 1 }
+    }
+  },
+  "outages": {
+    "_note": "When the report for this week asks a source for data, the source misbehaves. Data for the week still exists (it is the previous week for the next report).",
+    "zendesk": { "week": "2026-W42", "kind": "http_500" },
+    "linear": { "week": "2026-W43", "kind": "empty" }
+  },
+  "scenarios": [
+    { "week": "2026-W38", "label": "normal week", "expected_anomalies": [], "expected_missing": [], "approval": { "action": "approve", "approver": "owen" }, "expect_post": true },
+    { "week": "2026-W39", "label": "churn spike", "expected_anomalies": ["churn_spike", "mrr_contraction"], "expected_missing": [], "approval": { "action": "reject", "approver": "owen" }, "expect_post": false },
+    { "week": "2026-W40", "label": "SLA breach spike", "expected_anomalies": ["sla_spike", "csat_drop"], "expected_missing": [], "approval": { "action": "approve", "approver": "dana" }, "expect_post": false },
+    { "week": "2026-W41", "label": "failed deploys + injection in a ticket", "expected_anomalies": ["deploy_failures", "p0_bugs"], "expected_missing": [], "injection": true, "approval": { "action": "approve_without_token", "approver": "owen" }, "expect_post": false },
+    { "week": "2026-W42", "label": "Zendesk down (HTTP 500)", "expected_anomalies": [], "expected_missing": ["zendesk"], "approval": { "action": "approve", "approver": "owen" }, "expect_post": true },
+    { "week": "2026-W43", "label": "Linear returns nothing", "expected_anomalies": [], "expected_missing": ["linear"], "approval": { "action": "approve", "approver": "owen" }, "expect_post": true }
+  ]
+}

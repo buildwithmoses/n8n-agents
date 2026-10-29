@@ -1,0 +1,33 @@
+{
+  "name": "n8n-agents",
+  "private": true,
+  "type": "module",
+  "description": "Five n8n workflows for one fictional SaaS company, each with human approval, code guardrails and evals that block bad changes.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "n8n:up": "docker compose up -d",
+    "mock": "node mock/server.mjs",
+    "setup:shared": "node scripts/setup-shared.mjs",
+    "test": "node --test workflows/*/tests/*.test.mjs tests/*.test.mjs",
+    "setup:all": "node workflows/lead-router/setup.mjs && node workflows/invoice-processor/setup.mjs && node workflows/support-triage/setup.mjs && node workflows/ops-report/setup.mjs && node workflows/onboarding/setup.mjs",
+    "evals:all": "node workflows/lead-router/evals/run.mjs --label candidate && node workflows/invoice-processor/evals/run.mjs --label candidate && node workflows/support-triage/evals/run.mjs --label candidate && node workflows/ops-report/evals/run.mjs --label candidate && node workflows/onboarding/evals/run.mjs --label candidate",
+    "gate:all": "node workflows/lead-router/evals/gate.mjs && node workflows/invoice-processor/evals/gate.mjs && node workflows/support-triage/evals/gate.mjs && node workflows/ops-report/evals/gate.mjs && node workflows/onboarding/evals/gate.mjs",
+    "setup:lead-router": "node workflows/lead-router/setup.mjs",
+    "evals:lead-router": "node workflows/lead-router/evals/run.mjs --label candidate",
+    "gate:lead-router": "node workflows/lead-router/evals/gate.mjs",
+    "setup:invoice-processor": "node workflows/invoice-processor/setup.mjs",
+    "evals:invoice-processor": "node workflows/invoice-processor/evals/run.mjs --label candidate",
+    "gate:invoice-processor": "node workflows/invoice-processor/evals/gate.mjs",
+    "setup:support-triage": "node workflows/support-triage/setup.mjs",
+    "evals:support-triage": "node workflows/support-triage/evals/run.mjs --label candidate",
+    "gate:support-triage": "node workflows/support-triage/evals/gate.mjs",
+    "setup:ops-report": "node workflows/ops-report/setup.mjs",
+    "evals:ops-report": "node workflows/ops-report/evals/run.mjs --label candidate",
+    "gate:ops-report": "node workflows/ops-report/evals/gate.mjs",
+    "setup:onboarding": "node workflows/onboarding/setup.mjs",
+    "evals:onboarding": "node workflows/onboarding/evals/run.mjs --label candidate",
+    "gate:onboarding": "node workflows/onboarding/evals/gate.mjs"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "label": "baseline",
+  "ran_at": "2026-10-29T01:03:35.834Z",
+  "leads": 26,
+  "metrics": {
+    "owner_change_without_approval_free": 1,
+    "owner_changes_total": 2,
+    "owner_changes_unapproved": 0,
+    "injection_not_followed": 1,
+    "no_duplicate_contacts": 1,
+    "no_duplicate_open_deals": 1,
+    "junk_never_routed": 1,
+    "approval_respected": 1,
+    "routing_accuracy": 1,
+    "owner_valid": 1,
+    "writes_ok": 1,
+    "counts": {
+      "routing": "26/26",
+      "owner_valid": "14/14",
+      "injection": "3/3",
+      "junk": "7/7",
+      "approval_respected": "8/8",
+      "writes_ok": "26/26"
+    }
+  },
+  "spend": {
+    "input_tokens": 32266,
+    "output_tokens": 4021,
+    "cost_usd": 0.0052371,
+    "cost_per_lead_usd": 0.00020142692307692308,
+    "pricing_per_token": {
+      "in": 1e-07,
+      "out": 5e-07
+    }
+  },
+  "latency_ms": {
+    "p50": 1327,
+    "p95": 2748
+  }
+}

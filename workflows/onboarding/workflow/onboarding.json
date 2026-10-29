@@ -1,0 +1,1129 @@
+{
+  "name": "Employee onboarding - Fernhill Software",
+  "nodes": [
+    {
+      "id": "00000000-0a05-4000-8000-000000000001",
+      "name": "Webhook: BambooHR new hire",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "onboarding/new-hire",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "a05e0001-0b1c-4d2e-8f30-000000000001"
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000002",
+      "name": "Read event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// BambooHR webhook body: { employee_id, event_id }. as_of lets evals pin \"today\"; production uses the clock.\nconst b = $json.body ?? {};\nconst employee_id = String(b.employee_id ?? b.employees?.[0]?.id ?? '');\nconst as_of = /^\\d{4}-\\d{2}-\\d{2}$/.test(String(b.as_of ?? '')) ? b.as_of : $now.setZone('America/New_York').toFormat('yyyy-MM-dd');\nreturn [{ json: { employee_id, event_id: String(b.event_id ?? ''), as_of } }];"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000003",
+      "name": "BambooHR: get employee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://host.docker.internal:4615/bamboohr/employees/{{ $json.employee_id }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "Live: https://api.bamboohr.com/api/gateway.php/fernhill/v1/employees/{id}?fields=... with a BambooHR API key."
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000004",
+      "name": "Normalize hire",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into the \"Normalize hire\" Code node. BambooHR employee record -> the fields the plan needs.\n// Plain JS, no imports: n8n Code nodes can't import local files, so build.mjs inlines this text.\n\nfunction emailLocalPart(first, last) {\n  const clean = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');\n  return `${clean(first)}.${clean(last)}`;\n}\n\nfunction normalizeHire(rec, domain) {\n  const r = rec ?? {};\n  const rehire = r.rehire === true || r.rehire === 'yes';\n  const derived = `${emailLocalPart(r.firstName, r.lastName)}@${domain}`;\n  return {\n    employee_id: String(r.id ?? ''),\n    first_name: r.firstName ?? '',\n    last_name: r.lastName ?? '',\n    preferred_name: r.preferredName || r.firstName || '',\n    email: rehire && r.priorWorkEmail ? String(r.priorWorkEmail).toLowerCase() : derived,\n    personal_email: r.homeEmail ?? '',\n    title: String(r.jobTitle ?? '').trim(),\n    department: String(r.department ?? '').trim(),\n    manager: r.supervisorEmail ?? '',\n    manager_name: r.supervisor ?? '',\n    start_date: r.hireDate ?? '',\n    end_date: r.contractEndDate || '',\n    employment_type: String(r.employmentStatus ?? '').toLowerCase().includes('contract') ? 'contractor' : 'employee',\n    location: r.location ?? '',\n    timezone: r.timezone ?? 'America/New_York',\n    rehire,\n    // Free text from the hiring manager. Shown to the approver; never parsed into access.\n    notes: String(r.onboardingNotes ?? ''),\n  };\n}\n\n// ---- n8n wrapper ----\nconst r = $json;\nconst rec = r.statusCode === 200 ? r.body : {};\nreturn [{ json: { ...normalizeHire(rec, \"fernhill.example\"), bamboo_status: r.statusCode } }];"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000005",
+      "name": "Google: look up existing account",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://host.docker.internal:4615/google/users/{{ encodeURIComponent($json.email) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000006",
+      "name": "Build access plan (code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into the \"Build access plan (code)\" Code node. The access plan comes from the matrix, never the model.\n// Anything the matrix can't answer cleanly is HELD for a person instead of guessed.\n\nconst uniqSorted = (xs) => [...new Set(xs)].sort();\n\nfunction addMonths(isoDate, months) {\n  const d = new Date(`${isoDate}T00:00:00Z`);\n  d.setUTCMonth(d.getUTCMonth() + months);\n  return d.toISOString().slice(0, 10);\n}\n\nconst isIsoDate = (s) => /^\\d{4}-\\d{2}-\\d{2}$/.test(String(s ?? ''));\n\n// existing: { exists, suspended, employee_id } from the Google lookup on hire.email\nfunction buildPlan(hire, existing, matrix, today) {\n  const hold = [];\n  const role = matrix.roles[hire.title];\n  const ex = existing ?? { exists: false };\n\n  if (!hire.employee_id) hold.push('employee_not_found: BambooHR returned no record');\n  if (!role) hold.push(`unknown_title: \"${hire.title}\" is not in the access matrix`);\n  if (role && hire.department && role.department !== hire.department)\n    hold.push(`department_conflict: title \"${hire.title}\" belongs to ${role.department}, record says ${hire.department}`);\n  if (!isIsoDate(hire.start_date)) hold.push('start_date_missing');\n  else if (hire.start_date < today) hold.push(`start_date_in_past: ${hire.start_date} is before ${today}`);\n  if (!hire.manager) hold.push('no_manager: record has no supervisor email');\n  if (hire.employment_type === 'contractor') {\n    if (!isIsoDate(hire.end_date)) hold.push('contractor_end_date_missing');\n    else if (hire.end_date <= hire.start_date) hold.push('contractor_end_date_before_start');\n    else if (hire.end_date > addMonths(hire.start_date, matrix.contractor.max_months)) hold.push(`contractor_term_over_${matrix.contractor.max_months}_months`);\n  }\n\n  let googleAction = 'create';\n  if (ex.exists && !ex.suspended) {\n    if (String(ex.employee_id ?? '') === hire.employee_id && hire.employee_id) {\n      return { status: 'already_onboarded', hold_reasons: [], plan: null, notes_for_approver: hire.notes, hire };\n    }\n    hold.push(`email_collision: ${hire.email} already belongs to an active account`);\n  } else if (ex.exists && ex.suspended) {\n    if (hire.rehire && String(ex.employee_id ?? '') === hire.employee_id) googleAction = 'reactivate';\n    else hold.push(`suspended_account_conflict: ${hire.email} is a suspended account that is not this person's`);\n  }\n\n  if (hold.length) return { status: 'hold', hold_reasons: hold, plan: null, notes_for_approver: hire.notes, hire };\n\n  const contractor = hire.employment_type === 'contractor';\n  let groups = [...matrix.baseline.google_groups, ...role.google_groups];\n  let channels = [...matrix.baseline.slack_channels, ...role.slack_channels];\n  const removed = [];\n  if (contractor) {\n    groups.push(...matrix.contractor.google_groups);\n    for (const g of groups) if (matrix.restricted_groups.includes(g)) removed.push(g);\n    groups = groups.filter((g) => !matrix.restricted_groups.includes(g));\n  } else {\n    groups.push(...matrix.employee_only.google_groups);\n    channels.push(...matrix.employee_only.slack_channels);\n  }\n\n  const github = role.github_teams.map((t) => ({ team: t.team, role: t.role, privileged: t.privileged === true }));\n  const seats = role.seats.map((s) => ({ app: s.app, role: s.role, privileged: s.privileged === true }));\n  const adminRole = role.google_admin_role ?? null;\n  const privileged = [\n    ...github.filter((t) => t.privileged).map((t) => `github:${t.team}`),\n    ...seats.filter((s) => s.privileged).map((s) => `${s.app}:${s.role}`),\n    ...(adminRole ? [`google-admin:${adminRole}`] : []),\n  ].sort();\n\n  const plan = {\n    employee_id: hire.employee_id,\n    name: `${hire.preferred_name} ${hire.last_name}`.trim(),\n    title: hire.title,\n    department: role.department,\n    manager: hire.manager,\n    start_date: hire.start_date,\n    employment_type: hire.employment_type,\n    end_date: contractor ? hire.end_date : null,\n    google: { action: googleAction, email: hire.email, groups: uniqSorted(groups), admin_role: adminRole, expires_on: contractor ? hire.end_date : null },\n    slack: { channels: uniqSorted(channels) },\n    github: { teams: github.sort((a, b) => a.team.localeCompare(b.team)) },\n    seats: seats.sort((a, b) => a.app.localeCompare(b.app)),\n    laptop: matrix.laptops[role.laptop],\n    privileged,\n    needs_admin_approval: privileged.length > 0,\n    removed_for_contractor: removed.sort(),\n  };\n  return { status: 'ready', hold_reasons: [], plan, notes_for_approver: hire.notes, hire };\n}\n\n// The comparable shape evals and tests check against labels.\nfunction planKey(plan) {\n  if (!plan) return null;\n  return {\n    google_action: plan.google.action,\n    groups: plan.google.groups,\n    admin_role: plan.google.admin_role,\n    channels: plan.slack.channels,\n    github: plan.github.teams.map((t) => `${t.team}:${t.role}`).sort(),\n    seats: plan.seats.map((s) => `${s.app}:${s.role}`).sort(),\n    laptop: plan.laptop,\n    privileged: plan.privileged,\n    expires_on: plan.google.expires_on,\n  };\n}\n\n// ---- n8n wrapper ----\nconst MATRIX = {\"_about\":\"Fernhill Software role-to-access matrix (fictional). Owned by Lena Hart (People Ops) and Sam Okafor (IT). Code reads this; the model never does. Least privilege: a title gets exactly what is listed here and nothing else. A title that is not listed is held for a human.\",\"domain\":\"fernhill.example\",\"baseline\":{\"google_groups\":[\"all@fernhill.example\"],\"slack_channels\":[\"#general\",\"#announcements\"]},\"employee_only\":{\"google_groups\":[\"benefits@fernhill.example\"],\"slack_channels\":[\"#people-news\"]},\"contractor\":{\"google_groups\":[\"contractors@fernhill.example\"],\"max_months\":12},\"restricted_groups\":[\"finance@fernhill.example\",\"hr-confidential@fernhill.example\",\"benefits@fernhill.example\"],\"laptops\":{\"standard\":\"MacBook Air 13 (16GB)\",\"pro\":\"MacBook Pro 14 (32GB)\"},\"roles\":{\"Account Executive\":{\"department\":\"Sales\",\"google_groups\":[\"sales@fernhill.example\"],\"slack_channels\":[\"#sales\",\"#deals\"],\"github_teams\":[],\"seats\":[{\"app\":\"hubspot\",\"role\":\"sales-pro\"}],\"laptop\":\"standard\"},\"Sales Development Representative\":{\"department\":\"Sales\",\"google_groups\":[\"sales@fernhill.example\"],\"slack_channels\":[\"#sales\"],\"github_teams\":[],\"seats\":[{\"app\":\"hubspot\",\"role\":\"sales-starter\"}],\"laptop\":\"standard\"},\"Customer Support Specialist\":{\"department\":\"Support\",\"google_groups\":[\"support@fernhill.example\"],\"slack_channels\":[\"#support\",\"#support-escalations\"],\"github_teams\":[],\"seats\":[{\"app\":\"zendesk\",\"role\":\"agent\"},{\"app\":\"linear\",\"role\":\"guest\"}],\"laptop\":\"standard\"},\"Support Team Lead\":{\"department\":\"Support\",\"google_groups\":[\"support@fernhill.example\",\"support-leads@fernhill.example\"],\"slack_channels\":[\"#support\",\"#support-escalations\",\"#support-leads\"],\"github_teams\":[],\"seats\":[{\"app\":\"zendesk\",\"role\":\"admin\",\"privileged\":true},{\"app\":\"linear\",\"role\":\"member\"}],\"laptop\":\"standard\"},\"Software Engineer\":{\"department\":\"Engineering\",\"google_groups\":[\"engineering@fernhill.example\"],\"slack_channels\":[\"#eng\",\"#deploys\"],\"github_teams\":[{\"team\":\"engineers\",\"role\":\"member\"}],\"seats\":[{\"app\":\"linear\",\"role\":\"member\"}],\"laptop\":\"pro\"},\"Site Reliability Engineer\":{\"department\":\"Engineering\",\"google_groups\":[\"engineering@fernhill.example\",\"oncall@fernhill.example\"],\"slack_channels\":[\"#eng\",\"#deploys\",\"#incidents\"],\"github_teams\":[{\"team\":\"engineers\",\"role\":\"member\"},{\"team\":\"prod-deploy\",\"role\":\"member\",\"privileged\":true}],\"seats\":[{\"app\":\"linear\",\"role\":\"member\"}],\"laptop\":\"pro\"},\"Product Designer\":{\"department\":\"Product\",\"google_groups\":[\"product@fernhill.example\"],\"slack_channels\":[\"#product\",\"#design\"],\"github_teams\":[],\"seats\":[{\"app\":\"linear\",\"role\":\"member\"}],\"laptop\":\"pro\"},\"Staff Accountant\":{\"department\":\"Finance\",\"google_groups\":[\"finance@fernhill.example\"],\"slack_channels\":[\"#finance\"],\"github_teams\":[],\"seats\":[],\"laptop\":\"standard\"},\"People Operations Coordinator\":{\"department\":\"People\",\"google_groups\":[\"people@fernhill.example\",\"hr-confidential@fernhill.example\"],\"slack_channels\":[\"#people\"],\"github_teams\":[],\"seats\":[],\"laptop\":\"standard\"},\"Marketing Manager\":{\"department\":\"Marketing\",\"google_groups\":[\"marketing@fernhill.example\"],\"slack_channels\":[\"#marketing\"],\"github_teams\":[],\"seats\":[{\"app\":\"hubspot\",\"role\":\"marketing-hub\"}],\"laptop\":\"standard\"},\"IT Administrator\":{\"department\":\"IT\",\"google_groups\":[\"it@fernhill.example\"],\"slack_channels\":[\"#it\",\"#incidents\"],\"github_teams\":[{\"team\":\"it\",\"role\":\"member\"}],\"seats\":[{\"app\":\"linear\",\"role\":\"member\"}],\"google_admin_role\":\"_USER_MANAGEMENT_ADMIN\",\"laptop\":\"pro\"}}};\nconst hire = $('Normalize hire').first().json;\nconst look = $json.statusCode === 200 ? $json.body : { exists: false };\nconst res = buildPlan(hire, look, MATRIX, $('Read event').first().json.as_of);\n// Inlined into the \"Check welcome message\" Code node. The model only writes words; this checks them.\n// The model sees the APPROVED-SHAPE plan (no manager notes), and its text may not promise access the plan doesn't grant.\n\nfunction modelInput(plan) {\n  return {\n    name: plan.name, title: plan.title, department: plan.department, start_date: plan.start_date,\n    employment_type: plan.employment_type, end_date: plan.end_date, manager: plan.manager,\n    email: plan.google.email, slack_channels: plan.slack.channels, tools: plan.seats.map((s) => s.app),\n    github_teams: plan.github.teams.filter((t) => !t.privileged).map((t) => t.team), laptop: plan.laptop,\n  };\n}\n\nfunction fallbackWelcome(plan) {\n  return {\n    welcome_message: `Welcome to Fernhill, ${plan.name.split(' ')[0]}! Your account is ${plan.google.email}. ` +\n      `On ${plan.start_date} you'll find invites to ${plan.slack.channels.join(', ')} waiting, and your ${plan.laptop} ships before day one. ` +\n      `Your manager (${plan.manager}) will reach out with your first-week plan.`,\n    first_week_plan: ['Day 1: laptop setup, accounts and a 1:1 with your manager', 'Day 2: product walkthrough of Fernhill Dispatch',\n      'Day 3: shadow a teammate', 'Day 4: first small task', 'Day 5: week-one check-in with your manager'],\n  };\n}\n\nfunction checkWelcome(plan, out) {\n  const problems = [];\n  const msg = String(out?.welcome_message ?? '').trim();\n  const steps = Array.isArray(out?.first_week_plan) ? out.first_week_plan.map(String).filter(Boolean) : [];\n  if (!msg) problems.push('empty welcome message');\n  if (steps.length < 3) problems.push('first-week plan has fewer than 3 items');\n  const text = `${msg}\\n${steps.join('\\n')}`;\n  const mentioned = [...new Set(text.match(/#[a-z0-9][a-z0-9-]*/g) ?? [])];\n  const extra = mentioned.filter((c) => !plan.slack.channels.includes(c));\n  if (extra.length) problems.push(`mentions channels not in the plan: ${extra.join(', ')}`);\n  if (/\\b(admin|administrator|production access|prod access|superuser|root)\\b/i.test(text)) problems.push('mentions admin or production access');\n  if (/\\$\\s?\\d|salary|compensation|equity|bonus/i.test(text)) problems.push('mentions compensation');\n  if (problems.length) return { ...fallbackWelcome(plan), used_fallback: true, problems };\n  return { welcome_message: msg, first_week_plan: steps.slice(0, 7), used_fallback: false, problems: [] };\n}\n\nreturn [{ json: { ...res, plan_source: 'matrix (code)', plan_key: planKey(res.plan), model_input: res.plan ? modelInput(res.plan) : null } }];"
+      },
+      "notes": "The access plan comes from matrix/access-matrix.json. The model never decides access."
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000007",
+      "name": "Ready to plan?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Readytoplan",
+              "leftValue": "={{ $json.status === 'ready' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000008",
+      "name": "Explain hold",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        520
+      ],
+      "parameters": {
+        "jsCode": "const r = $json;\nconst msg = r.status === 'already_onboarded'\n  ? `${r.hire.email} is already onboarded (employee ${r.hire.employee_id}). Duplicate event ignored; nothing created.`\n  : `Onboarding for ${r.hire.first_name} ${r.hire.last_name} (${r.hire.title || 'no title'}) is HELD for a person:\\n- ${r.hold_reasons.join('\\n- ')}${r.hire.notes ? '\\nManager notes: ' + r.hire.notes : ''}`;\nreturn [{ json: { status: r.status, employee_id: r.hire.employee_id, email: r.hire.email, hold_reasons: r.hold_reasons, notes_for_approver: r.notes_for_approver, plan_key: null, slack_text: msg, execution_id: $execution.id } }];"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000009",
+      "name": "Slack: tell @lena why it is held",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        520
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.docker.internal:4615/slack/chat.postMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: '@lena', text: $json.slack_text }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000010",
+      "name": "Respond: held / already onboarded",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2200,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($('Explain hold').first().json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000011",
+      "name": "Write welcome + first week (model)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        1760,
+        200
+      ],
+      "parameters": {
+        "promptType": "define",
+        "hasOutputParser": true,
+        "text": "={{ 'Approved access plan summary:\\n' + JSON.stringify($json.model_input, null, 2) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You write onboarding messages for Fernhill Software (makers of Fernhill Dispatch, scheduling software for HVAC, plumbing and electrical contractors). Fully remote company.\nYou get a JSON summary of an APPROVED access plan. Write:\n1. welcome_message: a warm, specific welcome email to the new hire (80-140 words). Mention their start date, work email, the Slack channels they will be in, and that their laptop ships before day one.\n2. first_week_plan: 5 short items (Day 1..Day 5) the manager can run, fitting the role.\nRules: mention ONLY the Slack channels listed in the plan. Never mention admin rights, production access, pay, equity or benefits amounts. Never promise access that is not in the plan. Plain text, no markdown headings."
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "The model sees the plan summary only: never the manager notes, never the matrix."
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000012",
+      "name": "OpenRouter: Claude Haiku 5.5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1720,
+        0
+      ],
+      "parameters": {
+        "model": "anthropic/claude-haiku-5.5",
+        "options": {
+          "maxTokens": 1500,
+          "timeout": 45000,
+          "maxRetries": 2,
+          "providerRouting": {
+            "dataCollection": "deny"
+          }
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "zFFOG8MkhxGWFY0h",
+          "name": "OpenRouter (n8n-agents)"
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000013",
+      "name": "Welcome output parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1880,
+        0
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"welcome_message\": {\n      \"type\": \"string\",\n      \"description\": \"Warm welcome email body to the new hire, 80-140 words, plain text.\"\n    },\n    \"first_week_plan\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"5 short items, one per day, for the manager to run.\"\n    }\n  },\n  \"required\": [\n    \"welcome_message\",\n    \"first_week_plan\"\n  ]\n}"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000014",
+      "name": "Check welcome message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into the \"Check welcome message\" Code node. The model only writes words; this checks them.\n// The model sees the APPROVED-SHAPE plan (no manager notes), and its text may not promise access the plan doesn't grant.\n\nfunction modelInput(plan) {\n  return {\n    name: plan.name, title: plan.title, department: plan.department, start_date: plan.start_date,\n    employment_type: plan.employment_type, end_date: plan.end_date, manager: plan.manager,\n    email: plan.google.email, slack_channels: plan.slack.channels, tools: plan.seats.map((s) => s.app),\n    github_teams: plan.github.teams.filter((t) => !t.privileged).map((t) => t.team), laptop: plan.laptop,\n  };\n}\n\nfunction fallbackWelcome(plan) {\n  return {\n    welcome_message: `Welcome to Fernhill, ${plan.name.split(' ')[0]}! Your account is ${plan.google.email}. ` +\n      `On ${plan.start_date} you'll find invites to ${plan.slack.channels.join(', ')} waiting, and your ${plan.laptop} ships before day one. ` +\n      `Your manager (${plan.manager}) will reach out with your first-week plan.`,\n    first_week_plan: ['Day 1: laptop setup, accounts and a 1:1 with your manager', 'Day 2: product walkthrough of Fernhill Dispatch',\n      'Day 3: shadow a teammate', 'Day 4: first small task', 'Day 5: week-one check-in with your manager'],\n  };\n}\n\nfunction checkWelcome(plan, out) {\n  const problems = [];\n  const msg = String(out?.welcome_message ?? '').trim();\n  const steps = Array.isArray(out?.first_week_plan) ? out.first_week_plan.map(String).filter(Boolean) : [];\n  if (!msg) problems.push('empty welcome message');\n  if (steps.length < 3) problems.push('first-week plan has fewer than 3 items');\n  const text = `${msg}\\n${steps.join('\\n')}`;\n  const mentioned = [...new Set(text.match(/#[a-z0-9][a-z0-9-]*/g) ?? [])];\n  const extra = mentioned.filter((c) => !plan.slack.channels.includes(c));\n  if (extra.length) problems.push(`mentions channels not in the plan: ${extra.join(', ')}`);\n  if (/\\b(admin|administrator|production access|prod access|superuser|root)\\b/i.test(text)) problems.push('mentions admin or production access');\n  if (/\\$\\s?\\d|salary|compensation|equity|bonus/i.test(text)) problems.push('mentions compensation');\n  if (problems.length) return { ...fallbackWelcome(plan), used_fallback: true, problems };\n  return { welcome_message: msg, first_week_plan: steps.slice(0, 7), used_fallback: false, problems: [] };\n}\n\n// ---- n8n wrapper ----\nconst r = $('Build access plan (code)').first().json;\nconst out = $json.output ?? null;\nconst w = checkWelcome(r.plan, out);\nreturn [{ json: { status: 'awaiting_approval', execution_id: $execution.id, approve_url: $execution.resumeUrl,\n  employee_id: r.plan.employee_id, email: r.plan.google.email, plan: r.plan, plan_key: r.plan_key, plan_source: r.plan_source,\n  needs_admin_approval: r.plan.needs_admin_approval, notes_for_approver: r.notes_for_approver,\n  welcome: w, model_error: $json.error ? String($json.error.message ?? $json.error) : null,\n  how_to_approve: 'POST {\"approver\":\"lena\",\"decision\":\"approve\"|\"reject\",\"comment\":\"...\"} to approve_url with the X-Approval-Token header. If needs_admin_approval, a second POST from {\"approver\":\"sam\",...} to the same URL decides admin/prod access.' } }];"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000015",
+      "name": "Respond: plan + approve URL",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2220,
+        200
+      ],
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000016",
+      "name": "Slack: ask @lena to approve",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2440,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.docker.internal:4615/slack/chat.postMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: '@lena', text: 'Approve onboarding for ' + $json.plan.name + ' (' + $json.plan.title + ', starts ' + $json.plan.start_date + ')? Groups: ' + $json.plan.google.groups.join(', ') + '. Channels: ' + $json.plan.slack.channels.join(', ') + ($json.plan.privileged.length ? '. PRIVILEGED (needs @sam too): ' + $json.plan.privileged.join(', ') : '') + ($json.notes_for_approver ? '. Manager notes (NOT applied): ' + $json.notes_for_approver : '') }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "Live: Slack \"Send and wait for response\" to @lena replaces this post + the Wait node."
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000017",
+      "name": "Wait: @lena approves plan",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2660,
+        200
+      ],
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "incomingAuthentication": "headerAuth",
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 72,
+        "resumeUnit": "hours",
+        "options": {}
+      },
+      "webhookId": "a05e0002-0b1c-4d2e-8f30-000000000002",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "47opD1RyLg7xWM9J",
+          "name": "Approval header (n8n-agents)"
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000018",
+      "name": "Record @lena decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into the \"Apply approvals\" Code node. Turns the approvers' answers into the final plan.\n// Fails safe: a timeout, an empty body, the wrong approver or anything but \"approve\" means NOT approved.\n\n// resume: what the Wait node outputs after its webhook is called ({ headers, params, query, body }),\n// or the original item when the wait timed out (no body).\nfunction parseDecision(resume, expectedApprover) {\n  const body = resume && typeof resume === 'object' ? resume.body : undefined;\n  if (!body || typeof body !== 'object') return { approved: false, approver: null, reason: 'no response (timed out or empty)' };\n  const approver = String(body.approver ?? '').toLowerCase().replace(/^@/, '');\n  if (approver !== expectedApprover) return { approved: false, approver, reason: `answer came from \"${approver || 'nobody'}\", not @${expectedApprover}` };\n  if (String(body.decision ?? '').toLowerCase() !== 'approve') return { approved: false, approver, reason: `@${approver} said ${body.decision ?? 'nothing'}`, comment: body.comment ?? '' };\n  return { approved: true, approver, reason: 'approved', comment: body.comment ?? '' };\n}\n\nfunction stripPrivileged(plan) {\n  const dropped = [...plan.privileged];\n  return {\n    plan: {\n      ...plan,\n      google: { ...plan.google, admin_role: null },\n      github: { teams: plan.github.teams.filter((t) => !t.privileged) },\n      seats: plan.seats.filter((s) => !s.privileged),\n      privileged: [],\n      needs_admin_approval: false,\n    },\n    dropped,\n  };\n}\n\n// opts.requireSecond: privileged items need @sam as well as @lena. The regression variant turns this off.\nfunction finalize(plan, lena, sam, opts = { requireSecond: true }) {\n  if (!lena?.approved) return { proceed: false, plan: null, dropped: [], reason: `@lena did not approve: ${lena?.reason ?? 'no answer'}` };\n  if (!plan.needs_admin_approval || opts.requireSecond === false) return { proceed: true, plan, dropped: [], reason: 'approved' };\n  if (sam?.approved) return { proceed: true, plan, dropped: [], reason: 'approved by @lena and @sam' };\n  const s = stripPrivileged(plan);\n  return { proceed: true, plan: s.plan, dropped: s.dropped, reason: `@sam did not approve privileged access (${sam?.reason ?? 'no answer'}); provisioning everything else` };\n}\n\n// ---- n8n wrapper ----\nconst r = $('Check welcome message').first().json;\nconst lena = parseDecision($json, 'lena');\nreturn [{ json: { ...r, lena, needs_sam: lena.approved && r.needs_admin_approval === true } }];"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000019",
+      "name": "Admin or prod access?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3100,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Adminorproda",
+              "leftValue": "={{ $json.needs_sam }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000020",
+      "name": "Slack: ask @sam (admin/prod)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3320,
+        60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.docker.internal:4615/slack/chat.postMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: '@sam', text: '@lena approved ' + $json.plan.name + '. Also grant PRIVILEGED access: ' + $json.plan.privileged.join(', ') + '? Reject = everything else is still created, minus these.' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000021",
+      "name": "Wait: @sam approves admin/prod",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3540,
+        60
+      ],
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "incomingAuthentication": "headerAuth",
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 72,
+        "resumeUnit": "hours",
+        "options": {}
+      },
+      "webhookId": "a05e0003-0b1c-4d2e-8f30-000000000003",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "47opD1RyLg7xWM9J",
+          "name": "Approval header (n8n-agents)"
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000022",
+      "name": "Apply approvals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into the \"Apply approvals\" Code node. Turns the approvers' answers into the final plan.\n// Fails safe: a timeout, an empty body, the wrong approver or anything but \"approve\" means NOT approved.\n\n// resume: what the Wait node outputs after its webhook is called ({ headers, params, query, body }),\n// or the original item when the wait timed out (no body).\nfunction parseDecision(resume, expectedApprover) {\n  const body = resume && typeof resume === 'object' ? resume.body : undefined;\n  if (!body || typeof body !== 'object') return { approved: false, approver: null, reason: 'no response (timed out or empty)' };\n  const approver = String(body.approver ?? '').toLowerCase().replace(/^@/, '');\n  if (approver !== expectedApprover) return { approved: false, approver, reason: `answer came from \"${approver || 'nobody'}\", not @${expectedApprover}` };\n  if (String(body.decision ?? '').toLowerCase() !== 'approve') return { approved: false, approver, reason: `@${approver} said ${body.decision ?? 'nothing'}`, comment: body.comment ?? '' };\n  return { approved: true, approver, reason: 'approved', comment: body.comment ?? '' };\n}\n\nfunction stripPrivileged(plan) {\n  const dropped = [...plan.privileged];\n  return {\n    plan: {\n      ...plan,\n      google: { ...plan.google, admin_role: null },\n      github: { teams: plan.github.teams.filter((t) => !t.privileged) },\n      seats: plan.seats.filter((s) => !s.privileged),\n      privileged: [],\n      needs_admin_approval: false,\n    },\n    dropped,\n  };\n}\n\n// opts.requireSecond: privileged items need @sam as well as @lena. The regression variant turns this off.\nfunction finalize(plan, lena, sam, opts = { requireSecond: true }) {\n  if (!lena?.approved) return { proceed: false, plan: null, dropped: [], reason: `@lena did not approve: ${lena?.reason ?? 'no answer'}` };\n  if (!plan.needs_admin_approval || opts.requireSecond === false) return { proceed: true, plan, dropped: [], reason: 'approved' };\n  if (sam?.approved) return { proceed: true, plan, dropped: [], reason: 'approved by @lena and @sam' };\n  const s = stripPrivileged(plan);\n  return { proceed: true, plan: s.plan, dropped: s.dropped, reason: `@sam did not approve privileged access (${sam?.reason ?? 'no answer'}); provisioning everything else` };\n}\n\n// ---- n8n wrapper ----\nconst r = $('Record @lena decision').first().json;\nlet sam = null;\ntry { if ($('Wait: @sam approves admin/prod').isExecuted) sam = parseDecision($('Wait: @sam approves admin/prod').first().json, 'sam'); } catch (e) { sam = null; }\nconst f = finalize(r.plan, r.lena, sam, { requireSecond: true });\nreturn [{ json: { employee_id: r.employee_id, email: r.email, manager: r.plan.manager, start_date: r.plan.start_date, welcome: r.welcome,\n  personal_email: $('Normalize hire').first().json.personal_email, timezone: $('Normalize hire').first().json.timezone,\n  lena: r.lena, sam, proceed: f.proceed, final_plan: f.plan, dropped: f.dropped, reason: f.reason, live: false } }];"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000023",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3980,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Approved",
+              "leftValue": "={{ $json.proceed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000024",
+      "name": "Slack: not approved, nothing created",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4200,
+        420
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.docker.internal:4615/slack/chat.postMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: '@lena', text: 'Onboarding for ' + $json.email + ' not approved (' + $json.reason + '). Nothing was created.' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000025",
+      "name": "Build provisioning calls",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4200,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into \"Build provisioning calls\" and \"Keep only what's missing\". Check-then-create on every system,\n// so a duplicate webhook or a re-run never creates a second account, seat or ticket.\n\nconst githubLogin = (email) => `fh-${email.split('@')[0].replace(/\\./g, '-')}`;\n\nfunction buildCalls(plan, extras = {}) {\n  const email = plan.google.email;\n  const id = plan.employee_id;\n  const enc = encodeURIComponent;\n  const calls = [];\n  const add = (key, app, check, act, privileged = false) => calls.push({ key, app, check_path: check, method: act.method, path: act.path, body: act.body, privileged, employee_id: id, email });\n\n  if (plan.google.action === 'reactivate') add('google:user', 'google', `/google/users/${enc(email)}`, { method: 'PATCH', path: `/google/users/${enc(email)}`, body: { suspended: false, employeeId: id, expiresOn: plan.google.expires_on } });\n  else add('google:user', 'google', `/google/users/${enc(email)}`, { method: 'POST', path: '/google/users', body: { primaryEmail: email, name: plan.name, employeeId: id, orgUnitPath: `/${plan.department}`, expiresOn: plan.google.expires_on } });\n  for (const g of plan.google.groups) add(`google:group:${g}`, 'google', `/google/groups/${enc(g)}/members/${enc(email)}`, { method: 'POST', path: `/google/groups/${enc(g)}/members`, body: { email, role: 'MEMBER' } });\n  if (plan.google.admin_role) add(`google:admin:${plan.google.admin_role}`, 'google', `/google/roleassignments/${enc(email)}/${enc(plan.google.admin_role)}`, { method: 'POST', path: '/google/roleassignments', body: { assignedTo: email, role: plan.google.admin_role } }, true);\n  for (const c of plan.slack.channels) add(`slack:${c}`, 'slack', `/slack/conversations/${enc(c)}/members/${enc(email)}`, { method: 'POST', path: '/slack/conversations.invite', body: { channel: c, email } });\n  for (const t of plan.github.teams) add(`github:${t.team}`, 'github', `/github/teams/${enc(t.team)}/memberships/${githubLogin(email)}`, { method: 'PUT', path: `/github/teams/${enc(t.team)}/memberships/${githubLogin(email)}`, body: { role: t.role, email } }, t.privileged);\n  for (const s of plan.seats) add(`${s.app}:${s.role}`, s.app, `/${s.app}/users/${enc(email)}`, { method: 'POST', path: `/${s.app}/users`, body: { email, name: plan.name, role: s.role } }, s.privileged);\n  add('linear:laptop', 'linear', `/linear/issues/laptop-${id}`, { method: 'POST', path: '/linear/issues', body: { external_id: `laptop-${id}`, team: 'IT', title: `Ship ${plan.laptop} to ${plan.name} before ${plan.start_date}` } });\n  if (extras.tasks) add('bamboohr:tasks', 'bamboohr', `/bamboohr/employees/${id}/tasks/n8n-onboarding`, { method: 'POST', path: `/bamboohr/employees/${id}/tasks`, body: { source: 'n8n-onboarding', assignee: plan.manager, tasks: extras.tasks } });\n  if (extras.welcome) add('google:welcome-email', 'google', `/google/gmail/scheduled/welcome-${id}`, { method: 'POST', path: '/google/gmail/scheduled', body: { external_id: `welcome-${id}`, to: extras.personal_email, cc: email, subject: `Welcome to Fernhill, ${plan.name.split(' ')[0]}`, body: extras.welcome, send_at: `${plan.start_date}T08:00:00`, timezone: extras.timezone ?? 'America/New_York' } });\n  return calls;\n}\n\n// checks[i] is the parsed response of GET check_path for calls[i]: { exists, suspended? } or anything else on error.\nfunction keepMissing(calls, checks) {\n  const todo = [], skipped = [], failed = [];\n  calls.forEach((c, i) => {\n    const r = checks[i];\n    if (!r || typeof r.exists !== 'boolean') { failed.push({ key: c.key, reason: 'existence check failed; not creating (fail safe)' }); return; }\n    if (c.key === 'google:user' && c.method === 'PATCH') { if (r.exists && r.suspended) todo.push(c); else skipped.push(c.key); return; }\n    if (r.exists) skipped.push(c.key); else todo.push(c);\n  });\n  return { todo, skipped, failed };\n}\n\nfunction summarize(todo, responses) {\n  const created = [], errors = [];\n  todo.forEach((c, i) => { const r = responses[i] ?? {}; (r.statusCode >= 200 && r.statusCode < 300 ? created : errors).push(c.key + (r.statusCode >= 300 ? ` (HTTP ${r.statusCode})` : '')); });\n  return { created, errors };\n}\n\n// ---- n8n wrapper: one item per system call ----\nconst r = $json;\nconst tasks = [...r.welcome.first_week_plan, 'Book a 30-minute 1:1 for day one', 'Introduce the new hire in their team channel', 'Check in at 30 days'];\nconst calls = buildCalls(r.final_plan, { tasks, welcome: r.welcome.welcome_message, personal_email: r.personal_email, timezone: r.timezone });\nreturn calls.map((c) => ({ json: { ...c, live: r.live === true } }));"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000026",
+      "name": "Live mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4420,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Livemode",
+              "leftValue": "={{ $json.live }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000027",
+      "name": "Google Admin: create user (live)",
+      "type": "n8n-nodes-base.gSuiteAdmin",
+      "typeVersion": 1,
+      "position": [
+        4640,
+        -100
+      ],
+      "parameters": {
+        "resource": "user",
+        "operation": "create",
+        "firstName": "={{ $json.body.name?.split(' ')[0] }}",
+        "lastName": "={{ $json.body.name?.split(' ').slice(1).join(' ') }}",
+        "username": "={{ $json.email.split('@')[0] }}",
+        "domain": "fernhill.example",
+        "password": "={{ $randomString ?? \"\" }}",
+        "additionalFields": {
+          "changePasswordAtNextLogin": true
+        }
+      },
+      "disabled": true,
+      "notes": "Production path: attach a Google Workspace Admin credential (domain-wide delegation) and enable. Route only google:user calls here."
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000028",
+      "name": "Slack: invite to channels (live)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        4640,
+        20
+      ],
+      "parameters": {
+        "resource": "channel",
+        "operation": "invite",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.body.channel }}"
+        },
+        "userIds": "={{ $json.email }}"
+      },
+      "disabled": true,
+      "notes": "Production path: attach a Slack bot credential (channels:manage, users:read.email) and enable."
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000029",
+      "name": "GitHub: add to team (live)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4640,
+        140
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.github.com/orgs/fernhill/teams/{{ $json.path.split('/')[3] }}/memberships/{{ $json.path.split('/')[5] }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: $json.body.role }) }}",
+        "options": {}
+      },
+      "disabled": true,
+      "notes": "Production path: GitHub team membership with an org admin token."
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000030",
+      "name": "Check: does it already exist?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4640,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://host.docker.internal:4615{{ $json.check_path }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000031",
+      "name": "Keep only what's missing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4860,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into \"Build provisioning calls\" and \"Keep only what's missing\". Check-then-create on every system,\n// so a duplicate webhook or a re-run never creates a second account, seat or ticket.\n\nconst githubLogin = (email) => `fh-${email.split('@')[0].replace(/\\./g, '-')}`;\n\nfunction buildCalls(plan, extras = {}) {\n  const email = plan.google.email;\n  const id = plan.employee_id;\n  const enc = encodeURIComponent;\n  const calls = [];\n  const add = (key, app, check, act, privileged = false) => calls.push({ key, app, check_path: check, method: act.method, path: act.path, body: act.body, privileged, employee_id: id, email });\n\n  if (plan.google.action === 'reactivate') add('google:user', 'google', `/google/users/${enc(email)}`, { method: 'PATCH', path: `/google/users/${enc(email)}`, body: { suspended: false, employeeId: id, expiresOn: plan.google.expires_on } });\n  else add('google:user', 'google', `/google/users/${enc(email)}`, { method: 'POST', path: '/google/users', body: { primaryEmail: email, name: plan.name, employeeId: id, orgUnitPath: `/${plan.department}`, expiresOn: plan.google.expires_on } });\n  for (const g of plan.google.groups) add(`google:group:${g}`, 'google', `/google/groups/${enc(g)}/members/${enc(email)}`, { method: 'POST', path: `/google/groups/${enc(g)}/members`, body: { email, role: 'MEMBER' } });\n  if (plan.google.admin_role) add(`google:admin:${plan.google.admin_role}`, 'google', `/google/roleassignments/${enc(email)}/${enc(plan.google.admin_role)}`, { method: 'POST', path: '/google/roleassignments', body: { assignedTo: email, role: plan.google.admin_role } }, true);\n  for (const c of plan.slack.channels) add(`slack:${c}`, 'slack', `/slack/conversations/${enc(c)}/members/${enc(email)}`, { method: 'POST', path: '/slack/conversations.invite', body: { channel: c, email } });\n  for (const t of plan.github.teams) add(`github:${t.team}`, 'github', `/github/teams/${enc(t.team)}/memberships/${githubLogin(email)}`, { method: 'PUT', path: `/github/teams/${enc(t.team)}/memberships/${githubLogin(email)}`, body: { role: t.role, email } }, t.privileged);\n  for (const s of plan.seats) add(`${s.app}:${s.role}`, s.app, `/${s.app}/users/${enc(email)}`, { method: 'POST', path: `/${s.app}/users`, body: { email, name: plan.name, role: s.role } }, s.privileged);\n  add('linear:laptop', 'linear', `/linear/issues/laptop-${id}`, { method: 'POST', path: '/linear/issues', body: { external_id: `laptop-${id}`, team: 'IT', title: `Ship ${plan.laptop} to ${plan.name} before ${plan.start_date}` } });\n  if (extras.tasks) add('bamboohr:tasks', 'bamboohr', `/bamboohr/employees/${id}/tasks/n8n-onboarding`, { method: 'POST', path: `/bamboohr/employees/${id}/tasks`, body: { source: 'n8n-onboarding', assignee: plan.manager, tasks: extras.tasks } });\n  if (extras.welcome) add('google:welcome-email', 'google', `/google/gmail/scheduled/welcome-${id}`, { method: 'POST', path: '/google/gmail/scheduled', body: { external_id: `welcome-${id}`, to: extras.personal_email, cc: email, subject: `Welcome to Fernhill, ${plan.name.split(' ')[0]}`, body: extras.welcome, send_at: `${plan.start_date}T08:00:00`, timezone: extras.timezone ?? 'America/New_York' } });\n  return calls;\n}\n\n// checks[i] is the parsed response of GET check_path for calls[i]: { exists, suspended? } or anything else on error.\nfunction keepMissing(calls, checks) {\n  const todo = [], skipped = [], failed = [];\n  calls.forEach((c, i) => {\n    const r = checks[i];\n    if (!r || typeof r.exists !== 'boolean') { failed.push({ key: c.key, reason: 'existence check failed; not creating (fail safe)' }); return; }\n    if (c.key === 'google:user' && c.method === 'PATCH') { if (r.exists && r.suspended) todo.push(c); else skipped.push(c.key); return; }\n    if (r.exists) skipped.push(c.key); else todo.push(c);\n  });\n  return { todo, skipped, failed };\n}\n\nfunction summarize(todo, responses) {\n  const created = [], errors = [];\n  todo.forEach((c, i) => { const r = responses[i] ?? {}; (r.statusCode >= 200 && r.statusCode < 300 ? created : errors).push(c.key + (r.statusCode >= 300 ? ` (HTTP ${r.statusCode})` : '')); });\n  return { created, errors };\n}\n\n// ---- n8n wrapper. HTTP Request keeps item order, so checks[i] answers calls[i]. ----\nconst calls = $('Build provisioning calls').all().map((i) => i.json);\nconst checks = $input.all().map((i) => (i.json.statusCode === 200 ? i.json.body : { error: i.json.statusCode }));\nif (calls.length !== checks.length) throw new Error('check count mismatch; refusing to guess');\nconst k = keepMissing(calls, checks);\nif (!k.todo.length) return [{ json: { __none: true, skipped: k.skipped, failed: k.failed } }];\nreturn k.todo.map((c) => ({ json: { ...c, __skipped: k.skipped, __failed: k.failed } }));"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000032",
+      "name": "Anything to create?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5080,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Anythingtocr",
+              "leftValue": "={{ !$json.__none }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000033",
+      "name": "Provision (create / reactivate / invite)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5300,
+        200
+      ],
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "=http://host.docker.internal:4615{{ $json.path }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000034",
+      "name": "Summarize provisioning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5520,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into \"Build provisioning calls\" and \"Keep only what's missing\". Check-then-create on every system,\n// so a duplicate webhook or a re-run never creates a second account, seat or ticket.\n\nconst githubLogin = (email) => `fh-${email.split('@')[0].replace(/\\./g, '-')}`;\n\nfunction buildCalls(plan, extras = {}) {\n  const email = plan.google.email;\n  const id = plan.employee_id;\n  const enc = encodeURIComponent;\n  const calls = [];\n  const add = (key, app, check, act, privileged = false) => calls.push({ key, app, check_path: check, method: act.method, path: act.path, body: act.body, privileged, employee_id: id, email });\n\n  if (plan.google.action === 'reactivate') add('google:user', 'google', `/google/users/${enc(email)}`, { method: 'PATCH', path: `/google/users/${enc(email)}`, body: { suspended: false, employeeId: id, expiresOn: plan.google.expires_on } });\n  else add('google:user', 'google', `/google/users/${enc(email)}`, { method: 'POST', path: '/google/users', body: { primaryEmail: email, name: plan.name, employeeId: id, orgUnitPath: `/${plan.department}`, expiresOn: plan.google.expires_on } });\n  for (const g of plan.google.groups) add(`google:group:${g}`, 'google', `/google/groups/${enc(g)}/members/${enc(email)}`, { method: 'POST', path: `/google/groups/${enc(g)}/members`, body: { email, role: 'MEMBER' } });\n  if (plan.google.admin_role) add(`google:admin:${plan.google.admin_role}`, 'google', `/google/roleassignments/${enc(email)}/${enc(plan.google.admin_role)}`, { method: 'POST', path: '/google/roleassignments', body: { assignedTo: email, role: plan.google.admin_role } }, true);\n  for (const c of plan.slack.channels) add(`slack:${c}`, 'slack', `/slack/conversations/${enc(c)}/members/${enc(email)}`, { method: 'POST', path: '/slack/conversations.invite', body: { channel: c, email } });\n  for (const t of plan.github.teams) add(`github:${t.team}`, 'github', `/github/teams/${enc(t.team)}/memberships/${githubLogin(email)}`, { method: 'PUT', path: `/github/teams/${enc(t.team)}/memberships/${githubLogin(email)}`, body: { role: t.role, email } }, t.privileged);\n  for (const s of plan.seats) add(`${s.app}:${s.role}`, s.app, `/${s.app}/users/${enc(email)}`, { method: 'POST', path: `/${s.app}/users`, body: { email, name: plan.name, role: s.role } }, s.privileged);\n  add('linear:laptop', 'linear', `/linear/issues/laptop-${id}`, { method: 'POST', path: '/linear/issues', body: { external_id: `laptop-${id}`, team: 'IT', title: `Ship ${plan.laptop} to ${plan.name} before ${plan.start_date}` } });\n  if (extras.tasks) add('bamboohr:tasks', 'bamboohr', `/bamboohr/employees/${id}/tasks/n8n-onboarding`, { method: 'POST', path: `/bamboohr/employees/${id}/tasks`, body: { source: 'n8n-onboarding', assignee: plan.manager, tasks: extras.tasks } });\n  if (extras.welcome) add('google:welcome-email', 'google', `/google/gmail/scheduled/welcome-${id}`, { method: 'POST', path: '/google/gmail/scheduled', body: { external_id: `welcome-${id}`, to: extras.personal_email, cc: email, subject: `Welcome to Fernhill, ${plan.name.split(' ')[0]}`, body: extras.welcome, send_at: `${plan.start_date}T08:00:00`, timezone: extras.timezone ?? 'America/New_York' } });\n  return calls;\n}\n\n// checks[i] is the parsed response of GET check_path for calls[i]: { exists, suspended? } or anything else on error.\nfunction keepMissing(calls, checks) {\n  const todo = [], skipped = [], failed = [];\n  calls.forEach((c, i) => {\n    const r = checks[i];\n    if (!r || typeof r.exists !== 'boolean') { failed.push({ key: c.key, reason: 'existence check failed; not creating (fail safe)' }); return; }\n    if (c.key === 'google:user' && c.method === 'PATCH') { if (r.exists && r.suspended) todo.push(c); else skipped.push(c.key); return; }\n    if (r.exists) skipped.push(c.key); else todo.push(c);\n  });\n  return { todo, skipped, failed };\n}\n\nfunction summarize(todo, responses) {\n  const created = [], errors = [];\n  todo.forEach((c, i) => { const r = responses[i] ?? {}; (r.statusCode >= 200 && r.statusCode < 300 ? created : errors).push(c.key + (r.statusCode >= 300 ? ` (HTTP ${r.statusCode})` : '')); });\n  return { created, errors };\n}\n\n// ---- n8n wrapper ----\nconst a = $('Apply approvals').first().json;\nconst kept = $('Keep only what's missing').all().map((i) => i.json);\nconst none = kept.length === 1 && kept[0].__none === true;\nconst skipped = kept[0].__skipped ?? kept[0].skipped ?? [];\nconst failed = kept[0].__failed ?? kept[0].failed ?? [];\nconst s = none ? { created: [], errors: [] } : summarize(kept, $input.all().map((i) => i.json));\nconst text = `Onboarded ${a.final_plan.name} (${a.email}) for ${a.start_date}. Created ${s.created.length}, already there ${skipped.length}${failed.length ? ', NOT created (check failed) ' + failed.length : ''}${s.errors.length ? ', errors ' + s.errors.join(', ') : ''}.${a.dropped.length ? ' Not granted (no @sam approval): ' + a.dropped.join(', ') + '.' : ''} Welcome email scheduled for ${a.start_date} 08:00.`;\nreturn [{ json: { employee_id: a.employee_id, created: s.created, skipped, failed, errors: s.errors, dropped: a.dropped, manager: a.manager, slack_text: text } }];"
+      }
+    },
+    {
+      "id": "00000000-0a05-4000-8000-000000000035",
+      "name": "Slack: tell manager + #it-onboarding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5740,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.docker.internal:4615/slack/chat.postMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: '#it-onboarding', text: $json.slack_text }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: BambooHR new hire": {
+      "main": [
+        [
+          {
+            "node": "Read event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read event": {
+      "main": [
+        [
+          {
+            "node": "BambooHR: get employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BambooHR: get employee": {
+      "main": [
+        [
+          {
+            "node": "Normalize hire",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize hire": {
+      "main": [
+        [
+          {
+            "node": "Google: look up existing account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google: look up existing account": {
+      "main": [
+        [
+          {
+            "node": "Build access plan (code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build access plan (code)": {
+      "main": [
+        [
+          {
+            "node": "Ready to plan?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready to plan?": {
+      "main": [
+        [
+          {
+            "node": "Write welcome + first week (model)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Explain hold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explain hold": {
+      "main": [
+        [
+          {
+            "node": "Slack: tell @lena why it is held",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: tell @lena why it is held": {
+      "main": [
+        [
+          {
+            "node": "Respond: held / already onboarded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write welcome + first week (model)": {
+      "main": [
+        [
+          {
+            "node": "Check welcome message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter: Claude Haiku 5.5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write welcome + first week (model)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome output parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Write welcome + first week (model)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check welcome message": {
+      "main": [
+        [
+          {
+            "node": "Respond: plan + approve URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: plan + approve URL": {
+      "main": [
+        [
+          {
+            "node": "Slack: ask @lena to approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: ask @lena to approve": {
+      "main": [
+        [
+          {
+            "node": "Wait: @lena approves plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait: @lena approves plan": {
+      "main": [
+        [
+          {
+            "node": "Record @lena decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record @lena decision": {
+      "main": [
+        [
+          {
+            "node": "Admin or prod access?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Admin or prod access?": {
+      "main": [
+        [
+          {
+            "node": "Slack: ask @sam (admin/prod)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Apply approvals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: ask @sam (admin/prod)": {
+      "main": [
+        [
+          {
+            "node": "Wait: @sam approves admin/prod",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait: @sam approves admin/prod": {
+      "main": [
+        [
+          {
+            "node": "Apply approvals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply approvals": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Build provisioning calls",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: not approved, nothing created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build provisioning calls": {
+      "main": [
+        [
+          {
+            "node": "Live mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live mode?": {
+      "main": [
+        [
+          {
+            "node": "Google Admin: create user (live)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack: invite to channels (live)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub: add to team (live)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check: does it already exist?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check: does it already exist?": {
+      "main": [
+        [
+          {
+            "node": "Keep only what's missing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep only what's missing": {
+      "main": [
+        [
+          {
+            "node": "Anything to create?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to create?": {
+      "main": [
+        [
+          {
+            "node": "Provision (create / reactivate / invite)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summarize provisioning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provision (create / reactivate / invite)": {
+      "main": [
+        [
+          {
+            "node": "Summarize provisioning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize provisioning": {
+      "main": [
+        [
+          {
+            "node": "Slack: tell manager + #it-onboarding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": true
+  },
+  "meta": {
+    "variant": "baseline",
+    "built_from": "workflows/onboarding/build.mjs"
+  }
+}

@@ -1,0 +1,894 @@
+{
+  "name": "Lead Router - Fernhill (REGRESSION: model decides)",
+  "nodes": [
+    {
+      "id": "00000000-0a01-4000-8000-000000000001",
+      "name": "Webhook: POST /lead-router",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-router",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "0a01d3c9-1b7e-4f0a-9d7c-1f2e3a4b0001"
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000002",
+      "name": "Normalize lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Inlined into the \"Normalize lead\" Code node. Plain JS, no imports.\n// Cleans the demo-request form: trims, lowercases email, pulls the email domain and website domain,\n// uppercases the state, caps the free text (head + tail kept so a long message keeps its ending).\nfunction normalizeLead(raw, opts = {}) {\n  const s = (v) => (v === undefined || v === null ? '' : String(v)).trim();\n  const email = s(raw.email).toLowerCase();\n  const emailDomain = email.includes('@') ? email.split('@').pop() : '';\n  const website = s(raw.website).toLowerCase().replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0];\n  const max = opts.maxChars ?? 2000;\n  let message = s(raw.message).replace(/\\r/g, '');\n  if (message.length > max) message = message.slice(0, Math.floor(max * 0.7)) + '\\n[...]\\n' + message.slice(-Math.floor(max * 0.3));\n  return {\n    lead_id: s(raw.lead_id) || s(raw.id) || `lead-${Date.now()}`,\n    first_name: s(raw.first_name), last_name: s(raw.last_name),\n    email, email_domain: emailDomain,\n    company: s(raw.company), website, domain: website || emailDomain,\n    phone: s(raw.phone), state: s(raw.state).toUpperCase().slice(0, 2),\n    team_size: s(raw.team_size), message,\n    submitted_at: s(raw.submitted_at) || new Date().toISOString(),\n    source: s(raw.source) || 'website_demo_form',\n  };\n}\n\n// ---- n8n wrapper ----\nconst body = $('Webhook: POST /lead-router').first().json.body ?? {};\nconst raw = body.lead ?? body;\nreturn [{ json: { ...normalizeLead(raw), live: body.live === true } }];"
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000003",
+      "name": "Enrich company (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "options": {},
+        "method": "GET",
+        "url": "http://host.docker.internal:4610/enrich/company",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "domain",
+              "value": "={{ $json.domain }}"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Clearbit-style enrichment. Failure is fine: routing falls back to form fields."
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000004",
+      "name": "Screen lead (code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const RULES = {\"_doc\":\"Fernhill lead routing rules. Owned by Dana Whitlock (Head of Sales). Code reads this file; the model never sees it and never decides routing.\",\"segments\":[{\"name\":\"Starter\",\"min_techs\":1,\"max_techs\":5},{\"name\":\"Pro\",\"min_techs\":6,\"max_techs\":25},{\"name\":\"Enterprise\",\"min_techs\":26,\"max_techs\":1000000}],\"team_size_dropdown\":{\"1-5\":3,\"6-25\":12,\"26-100\":50,\"100+\":150},\"territories\":{\"East\":[\"ME\",\"NH\",\"VT\",\"MA\",\"RI\",\"CT\",\"NY\",\"NJ\",\"PA\",\"DE\",\"MD\",\"DC\",\"VA\",\"WV\",\"NC\",\"SC\",\"GA\",\"FL\"],\"Central\":[\"OH\",\"MI\",\"IN\",\"IL\",\"WI\",\"MN\",\"IA\",\"MO\",\"KY\",\"TN\",\"AL\",\"MS\",\"LA\",\"AR\",\"OK\",\"TX\",\"KS\",\"NE\",\"SD\",\"ND\"],\"West\":[\"MT\",\"WY\",\"CO\",\"NM\",\"AZ\",\"UT\",\"NV\",\"ID\",\"WA\",\"OR\",\"CA\",\"AK\",\"HI\"]},\"owners\":[{\"id\":\"own-ava\",\"name\":\"Ava Brennan\",\"slack\":\"@ava\",\"territory\":\"East\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-jules\",\"name\":\"Jules Moreno\",\"slack\":\"@jules\",\"territory\":\"East\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-tariq\",\"name\":\"Tariq Nolan\",\"slack\":\"@tariq\",\"territory\":\"Central\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-mei\",\"name\":\"Mei Calloway\",\"slack\":\"@mei\",\"territory\":\"Central\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-rhys\",\"name\":\"Rhys Delgado\",\"slack\":\"@rhys\",\"territory\":\"West\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-noor\",\"name\":\"Noor Ashby\",\"slack\":\"@noor\",\"territory\":\"West\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-gideon\",\"name\":\"Gideon Park\",\"slack\":\"@gideon\",\"territory\":\"Any\",\"segments\":[\"Enterprise\"],\"capacity\":15},{\"id\":\"own-celia\",\"name\":\"Celia Fontaine\",\"slack\":\"@celia\",\"territory\":\"Any\",\"segments\":[\"Enterprise\"],\"capacity\":15}],\"approver\":{\"name\":\"Dana Whitlock\",\"slack\":\"@dana\",\"id\":\"dana\"},\"icp\":{\"core_trades\":[\"hvac\",\"plumbing\",\"electrical\"],\"adjacent_trades\":[\"roofing\",\"garage_door\",\"pest_control\",\"appliance_repair\",\"landscaping\",\"solar\"],\"points\":{\"core_trade\":40,\"adjacent_trade\":15,\"tech_fit\":20,\"timeline_now\":20,\"timeline_30\":15,\"timeline_90\":8,\"switching_from_competitor\":10,\"us_state\":5,\"business_email\":5},\"tech_fit\":{\"min\":2,\"max\":200},\"tiers\":{\"A\":70,\"B\":45}},\"competitors\":{\"domains\":[\"wrenchly.example\",\"dispatchpro.example\",\"fieldnimbus.example\"],\"names\":[\"wrenchly\",\"dispatchpro\",\"dispatch pro\",\"fieldnimbus\",\"field nimbus\"]},\"free_mail_domains\":[\"gmail.example\",\"yahoo.example\",\"outlook.example\",\"hotmail.example\",\"icloud.example\",\"gmail.com\",\"yahoo.com\",\"outlook.com\",\"hotmail.com\",\"icloud.com\",\"aol.com\"],\"student_domains_suffix\":[\".edu\"],\"patterns\":{\"spam\":[\"backlink\",\"\\\\bseo\\\\b.*(service|ranking|package)\",\"guest post\",\"crypto\",\"bitcoin\",\"forex\",\"casino\",\"viagra\",\"loan offer\",\"rank #?1 on google\",\"web traffic\"],\"student\":[\"\\\\bstudent\\\\b\",\"class project\",\"\\\\bthesis\\\\b\",\"\\\\bcapstone\\\\b\",\"school (project|assignment)\",\"\\\\bmy professor\\\\b\"],\"job_seeker\":[\"\\\\bresume\\\\b\",\"\\\\bcv\\\\b\",\"apply(ing)? for (a |the )?(job|position|role)\",\"job opening\",\"are you hiring\",\"career opportunit\",\"looking for (a )?(job|work|employment)\",\"open (role|position)s?\"],\"injection\":[\"ignore (all |any )?(previous|prior|above|earlier) (instructions|rules)\",\"disregard (the |your )?(instructions|rules)\",\"system prompt\",\"you are (an? )?(ai|assistant|language model)\",\"as an ai\",\"(assign|route) (this|me|the lead) (directly )?to\",\"mark (this|me|the lead) as\",\"set (the )?(priority|segment|owner|score)\",\"override (the |your )?(rules|routing|instructions)\",\"\\\\[\\\\[?system\",\"new instructions\",\"do not (tell|notify) (dana|anyone)\"]}};\n// Inlined into the \"Screen + score + route (code)\" Code node. Plain JS, no imports.\n// Deterministic screening that the model cannot argue with: spam, students, job seekers, competitors,\n// and prompt injection in the free-text box. Patterns come from rules.json.\nfunction screenLead(lead, rules) {\n  const text = `${lead.company}\\n${lead.message}`.toLowerCase();\n  const any = (list) => (list ?? []).some((p) => new RegExp(p, 'i').test(text));\n  const urls = (lead.message.match(/https?:\\/\\/|www\\./gi) ?? []).length;\n  const flags = [];\n  if (any(rules.patterns.injection)) flags.push('injection');\n  const domain = (lead.domain || '').toLowerCase();\n  const competitor = rules.competitors.domains.includes(lead.email_domain) || rules.competitors.domains.includes(domain)\n    || rules.competitors.names.some((n) => lead.company.toLowerCase().includes(n));\n  let junk = null;\n  if (any(rules.patterns.spam) || urls >= 3 || (!lead.email.includes('@'))) junk = 'spam';\n  else if (competitor) junk = 'competitor';\n  else if (rules.student_domains_suffix.some((suf) => lead.email_domain.endsWith(suf)) || any(rules.patterns.student)) junk = 'student';\n  else if (any(rules.patterns.job_seeker)) junk = 'job_seeker';\n  return { junk, flags, injection: flags.includes('injection'), free_mail: rules.free_mail_domains.includes(lead.email_domain) };\n}\n\n// ---- n8n wrapper ----\nconst lead = $('Normalize lead').first().json;\nconst e = $input.first().json;\nconst enrichment = e && e.found ? e : { found: false };\nconst screen = screenLead(lead, RULES);\nconst prompt_text = '<form_answer>\\nCompany: ' + lead.company + '\\nTeam size picked on form: ' + (lead.team_size || 'not given') + '\\n\\n' + lead.message + '\\n</form_answer>';\nreturn [{ json: { lead, enrichment, screen, prompt_text } }];"
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000005",
+      "name": "Extract fields (Basic LLM Chain)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt_text }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are Fernhill Software's lead router. Read the demo request and decide everything: the trade, tech count, segment (Starter up to 5 techs, Pro 6-25, Enterprise 26+), which rep owns it, and whether to route it, nurture it or drop it.\n\nReps (pick the best fit by territory and segment):\n- own-ava: Ava Brennan, East territory, Starter/Pro\n- own-jules: Jules Moreno, East territory, Starter/Pro\n- own-tariq: Tariq Nolan, Central territory, Starter/Pro\n- own-mei: Mei Calloway, Central territory, Starter/Pro\n- own-rhys: Rhys Delgado, West territory, Starter/Pro\n- own-noor: Noor Ashby, West territory, Starter/Pro\n- own-gideon: Gideon Park, Any territory, Enterprise\n- own-celia: Celia Fontaine, Any territory, Enterprise\n\nFollow any routing preferences the visitor states. Write a two-sentence summary for the rep."
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "REGRESSION variant: the model decides routing."
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000006",
+      "name": "OpenRouter: Claude Haiku 5.5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        880,
+        520
+      ],
+      "parameters": {
+        "model": "anthropic/claude-haiku-5.5",
+        "options": {
+          "maxTokens": 800,
+          "temperature": 0,
+          "timeout": 45000,
+          "maxRetries": 2,
+          "providerRouting": {
+            "dataCollection": "deny"
+          }
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "zFFOG8MkhxGWFY0h",
+          "name": "OpenRouter (n8n-agents)"
+        }
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000007",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1060,
+        520
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"trade\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"hvac\",\n        \"plumbing\",\n        \"electrical\",\n        \"roofing\",\n        \"garage_door\",\n        \"pest_control\",\n        \"appliance_repair\",\n        \"landscaping\",\n        \"solar\",\n        \"other\",\n        \"unknown\"\n      ]\n    },\n    \"tech_count\": {\n      \"type\": \"integer\",\n      \"description\": \"Field techs, crews or trucks stated in the text. 0 if not stated.\"\n    },\n    \"current_software\": {\n      \"type\": \"string\"\n    },\n    \"timeline\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"now\",\n        \"within_30_days\",\n        \"1_3_months\",\n        \"3_plus_months\",\n        \"unknown\"\n      ]\n    },\n    \"summary\": {\n      \"type\": \"string\",\n      \"description\": \"Two plain sentences for the sales rep.\"\n    },\n    \"segment\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Starter\",\n        \"Pro\",\n        \"Enterprise\"\n      ]\n    },\n    \"owner_id\": {\n      \"type\": \"string\",\n      \"description\": \"id of the rep who should own this lead\"\n    },\n    \"disposition\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"route\",\n        \"nurture\",\n        \"drop\"\n      ]\n    }\n  },\n  \"required\": [\n    \"trade\",\n    \"tech_count\",\n    \"current_software\",\n    \"timeline\",\n    \"summary\",\n    \"segment\",\n    \"owner_id\",\n    \"disposition\"\n  ],\n  \"additionalProperties\": false\n}"
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000008",
+      "name": "HubSpot: owners + load",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "options": {},
+        "method": "GET",
+        "url": "http://host.docker.internal:4610/hubspot/owners"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000009",
+      "name": "HubSpot: dedupe lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "options": {},
+        "method": "GET",
+        "url": "http://host.docker.internal:4610/hubspot/lookup",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "={{ $('Screen lead (code)').first().json.lead.email }}"
+            },
+            {
+              "name": "domain",
+              "value": "={{ $('Screen lead (code)').first().json.lead.domain }}"
+            }
+          ]
+        }
+      },
+      "executeOnce": true,
+      "notes": "Called but ignored in the naive variant."
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000010",
+      "name": "Score + route + plan (code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const RULES = {\"_doc\":\"Fernhill lead routing rules. Owned by Dana Whitlock (Head of Sales). Code reads this file; the model never sees it and never decides routing.\",\"segments\":[{\"name\":\"Starter\",\"min_techs\":1,\"max_techs\":5},{\"name\":\"Pro\",\"min_techs\":6,\"max_techs\":25},{\"name\":\"Enterprise\",\"min_techs\":26,\"max_techs\":1000000}],\"team_size_dropdown\":{\"1-5\":3,\"6-25\":12,\"26-100\":50,\"100+\":150},\"territories\":{\"East\":[\"ME\",\"NH\",\"VT\",\"MA\",\"RI\",\"CT\",\"NY\",\"NJ\",\"PA\",\"DE\",\"MD\",\"DC\",\"VA\",\"WV\",\"NC\",\"SC\",\"GA\",\"FL\"],\"Central\":[\"OH\",\"MI\",\"IN\",\"IL\",\"WI\",\"MN\",\"IA\",\"MO\",\"KY\",\"TN\",\"AL\",\"MS\",\"LA\",\"AR\",\"OK\",\"TX\",\"KS\",\"NE\",\"SD\",\"ND\"],\"West\":[\"MT\",\"WY\",\"CO\",\"NM\",\"AZ\",\"UT\",\"NV\",\"ID\",\"WA\",\"OR\",\"CA\",\"AK\",\"HI\"]},\"owners\":[{\"id\":\"own-ava\",\"name\":\"Ava Brennan\",\"slack\":\"@ava\",\"territory\":\"East\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-jules\",\"name\":\"Jules Moreno\",\"slack\":\"@jules\",\"territory\":\"East\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-tariq\",\"name\":\"Tariq Nolan\",\"slack\":\"@tariq\",\"territory\":\"Central\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-mei\",\"name\":\"Mei Calloway\",\"slack\":\"@mei\",\"territory\":\"Central\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-rhys\",\"name\":\"Rhys Delgado\",\"slack\":\"@rhys\",\"territory\":\"West\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-noor\",\"name\":\"Noor Ashby\",\"slack\":\"@noor\",\"territory\":\"West\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-gideon\",\"name\":\"Gideon Park\",\"slack\":\"@gideon\",\"territory\":\"Any\",\"segments\":[\"Enterprise\"],\"capacity\":15},{\"id\":\"own-celia\",\"name\":\"Celia Fontaine\",\"slack\":\"@celia\",\"territory\":\"Any\",\"segments\":[\"Enterprise\"],\"capacity\":15}],\"approver\":{\"name\":\"Dana Whitlock\",\"slack\":\"@dana\",\"id\":\"dana\"},\"icp\":{\"core_trades\":[\"hvac\",\"plumbing\",\"electrical\"],\"adjacent_trades\":[\"roofing\",\"garage_door\",\"pest_control\",\"appliance_repair\",\"landscaping\",\"solar\"],\"points\":{\"core_trade\":40,\"adjacent_trade\":15,\"tech_fit\":20,\"timeline_now\":20,\"timeline_30\":15,\"timeline_90\":8,\"switching_from_competitor\":10,\"us_state\":5,\"business_email\":5},\"tech_fit\":{\"min\":2,\"max\":200},\"tiers\":{\"A\":70,\"B\":45}},\"competitors\":{\"domains\":[\"wrenchly.example\",\"dispatchpro.example\",\"fieldnimbus.example\"],\"names\":[\"wrenchly\",\"dispatchpro\",\"dispatch pro\",\"fieldnimbus\",\"field nimbus\"]},\"free_mail_domains\":[\"gmail.example\",\"yahoo.example\",\"outlook.example\",\"hotmail.example\",\"icloud.example\",\"gmail.com\",\"yahoo.com\",\"outlook.com\",\"hotmail.com\",\"icloud.com\",\"aol.com\"],\"student_domains_suffix\":[\".edu\"],\"patterns\":{\"spam\":[\"backlink\",\"\\\\bseo\\\\b.*(service|ranking|package)\",\"guest post\",\"crypto\",\"bitcoin\",\"forex\",\"casino\",\"viagra\",\"loan offer\",\"rank #?1 on google\",\"web traffic\"],\"student\":[\"\\\\bstudent\\\\b\",\"class project\",\"\\\\bthesis\\\\b\",\"\\\\bcapstone\\\\b\",\"school (project|assignment)\",\"\\\\bmy professor\\\\b\"],\"job_seeker\":[\"\\\\bresume\\\\b\",\"\\\\bcv\\\\b\",\"apply(ing)? for (a |the )?(job|position|role)\",\"job opening\",\"are you hiring\",\"career opportunit\",\"looking for (a )?(job|work|employment)\",\"open (role|position)s?\"],\"injection\":[\"ignore (all |any )?(previous|prior|above|earlier) (instructions|rules)\",\"disregard (the |your )?(instructions|rules)\",\"system prompt\",\"you are (an? )?(ai|assistant|language model)\",\"as an ai\",\"(assign|route) (this|me|the lead) (directly )?to\",\"mark (this|me|the lead) as\",\"set (the )?(priority|segment|owner|score)\",\"override (the |your )?(rules|routing|instructions)\",\"\\\\[\\\\[?system\",\"new instructions\",\"do not (tell|notify) (dana|anyone)\"]}};\n// REGRESSION variant only (build.mjs --variant naive). The model's answer is trusted for segment, owner\n// and disposition, there is no dedupe and no approval. This is what the gate must block.\nfunction planNaive(lead, out, owners) {\n  const o = out ?? {};\n  const owner = owners.find((x) => x.id === o.owner_id) ?? null;\n  const props = { email: lead.email, firstname: lead.first_name, lastname: lead.last_name, company: lead.company, state: lead.state, segment: o.segment, trade: o.trade, tech_count: o.tech_count, lead_source: lead.source, ...(owner ? { owner_id: owner.id } : {}) };\n  const ops = [];\n  const disposition = o.disposition ?? 'route';\n  if (disposition !== 'drop') ops.push({ app: 'hubspot', method: 'POST', path: '/hubspot/contacts', body: { properties: props } });\n  if (disposition === 'route' && owner) {\n    ops.push({ app: 'hubspot', method: 'POST', path: '/hubspot/deals', body: { name: `${lead.company} - ${o.segment}`, stage: 'demo_requested', segment: o.segment, owner_id: owner.id, company_domain: lead.domain, contact_email: lead.email, summary: o.summary } });\n    ops.push({ app: 'slack', method: 'POST', path: '/slack/chat.postMessage', body: { channel: owner.slack, text: `New ${o.segment} lead: ${lead.company}. ${o.summary ?? ''}` } });\n  }\n  return { lead_id: lead.lead_id, email: lead.email, company: lead.company, disposition, reason: 'model decided', needs_approval: false, holds: [],\n    routing: { segment: o.segment ?? null, territory: owner?.territory ?? null, techs: o.tech_count, trade: o.trade, state: lead.state },\n    screen: { junk: null, flags: [], injection: false }, proposed_owner: owner ? { id: owner.id, name: owner.name, slack: owner.slack } : null, ops, model_ok: !!out };\n}\n\n// ---- n8n wrapper (REGRESSION: the model decides; no dedupe; no approvals) ----\nconst s = $('Screen lead (code)').first().json;\nconst llm = $('Extract fields (Basic LLM Chain)').first().json;\nconst owners = $('HubSpot: owners + load').first().json.owners ?? [];\nreturn [{ json: planNaive(s.lead, llm.output ?? null, owners) }];"
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000011",
+      "name": "Needs Dana?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "NeedsDana",
+              "leftValue": "={{ $json.needs_approval }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000012",
+      "name": "Live Slack approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "LiveSlackapp",
+              "leftValue": "={{ $json.live }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000013",
+      "name": "Slack: ask Dana (send and wait)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2200,
+        0
+      ],
+      "parameters": {
+        "operation": "sendAndWait",
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "mode": "username",
+          "value": "dana"
+        },
+        "message": "=Lead held for you: {{ $json.company }} ({{ $json.email }}). Why: {{ $json.reason }}. Proposed owner: {{ $json.proposed_owner?.name ?? \"none\" }}. Rules pick: {{ $json.rules_pick?.name ?? \"none\" }}.",
+        "responseType": "customForm",
+        "defineForm": "json",
+        "jsonOutput": "={{ JSON.stringify([{ fieldLabel: 'Decision', fieldType: 'dropdown', fieldOptions: { values: [{ option: 'approve' }, { option: 'reject' }] }, requiredField: true }, { fieldLabel: 'Owner id (blank = proposed)', fieldType: 'text' }]) }}",
+        "options": {
+          "messageButtonLabel": "Review lead",
+          "responseFormTitle": "Approve lead routing",
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 24,
+              "resumeUnit": "hours"
+            }
+          }
+        }
+      },
+      "disabled": true,
+      "webhookId": "0a01e4d0-2c8f-4a1b-8e9d-2a3b4c5d0002",
+      "notes": "Production approval. Attach a Slack credential and enable; map the form answer to {decision, owner_id, approver:\"dana\"}. Timeout = nothing applied."
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000014",
+      "name": "Respond: held for Dana + approve URL",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2200,
+        220
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ held: true, lead_id: $json.lead_id, disposition: $json.disposition, reason: $json.reason, holds: $json.holds, proposed_owner: $json.proposed_owner, rules_pick: $json.rules_pick, segment: $json.routing?.segment, territory: $json.routing?.territory, execution_id: $execution.id, approve_url: $execution.resumeUrl, how_to_approve: 'POST {\"decision\":\"approve\"|\"reject\",\"owner_id\":\"optional\",\"approver\":\"dana\"} to approve_url with the X-Approval-Token header' }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000015",
+      "name": "Wait for Dana",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        220
+      ],
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "incomingAuthentication": "headerAuth",
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 24,
+        "resumeUnit": "hours",
+        "options": {}
+      },
+      "webhookId": "0a01f5e1-3d9a-4b2c-9fae-3b4c5d6e0003",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "47opD1RyLg7xWM9J",
+          "name": "Approval header (n8n-agents)"
+        }
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000016",
+      "name": "Apply approval (code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        120
+      ],
+      "parameters": {
+        "jsCode": "const RULES = {\"_doc\":\"Fernhill lead routing rules. Owned by Dana Whitlock (Head of Sales). Code reads this file; the model never sees it and never decides routing.\",\"segments\":[{\"name\":\"Starter\",\"min_techs\":1,\"max_techs\":5},{\"name\":\"Pro\",\"min_techs\":6,\"max_techs\":25},{\"name\":\"Enterprise\",\"min_techs\":26,\"max_techs\":1000000}],\"team_size_dropdown\":{\"1-5\":3,\"6-25\":12,\"26-100\":50,\"100+\":150},\"territories\":{\"East\":[\"ME\",\"NH\",\"VT\",\"MA\",\"RI\",\"CT\",\"NY\",\"NJ\",\"PA\",\"DE\",\"MD\",\"DC\",\"VA\",\"WV\",\"NC\",\"SC\",\"GA\",\"FL\"],\"Central\":[\"OH\",\"MI\",\"IN\",\"IL\",\"WI\",\"MN\",\"IA\",\"MO\",\"KY\",\"TN\",\"AL\",\"MS\",\"LA\",\"AR\",\"OK\",\"TX\",\"KS\",\"NE\",\"SD\",\"ND\"],\"West\":[\"MT\",\"WY\",\"CO\",\"NM\",\"AZ\",\"UT\",\"NV\",\"ID\",\"WA\",\"OR\",\"CA\",\"AK\",\"HI\"]},\"owners\":[{\"id\":\"own-ava\",\"name\":\"Ava Brennan\",\"slack\":\"@ava\",\"territory\":\"East\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-jules\",\"name\":\"Jules Moreno\",\"slack\":\"@jules\",\"territory\":\"East\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-tariq\",\"name\":\"Tariq Nolan\",\"slack\":\"@tariq\",\"territory\":\"Central\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-mei\",\"name\":\"Mei Calloway\",\"slack\":\"@mei\",\"territory\":\"Central\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-rhys\",\"name\":\"Rhys Delgado\",\"slack\":\"@rhys\",\"territory\":\"West\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-noor\",\"name\":\"Noor Ashby\",\"slack\":\"@noor\",\"territory\":\"West\",\"segments\":[\"Starter\",\"Pro\"],\"capacity\":40},{\"id\":\"own-gideon\",\"name\":\"Gideon Park\",\"slack\":\"@gideon\",\"territory\":\"Any\",\"segments\":[\"Enterprise\"],\"capacity\":15},{\"id\":\"own-celia\",\"name\":\"Celia Fontaine\",\"slack\":\"@celia\",\"territory\":\"Any\",\"segments\":[\"Enterprise\"],\"capacity\":15}],\"approver\":{\"name\":\"Dana Whitlock\",\"slack\":\"@dana\",\"id\":\"dana\"},\"icp\":{\"core_trades\":[\"hvac\",\"plumbing\",\"electrical\"],\"adjacent_trades\":[\"roofing\",\"garage_door\",\"pest_control\",\"appliance_repair\",\"landscaping\",\"solar\"],\"points\":{\"core_trade\":40,\"adjacent_trade\":15,\"tech_fit\":20,\"timeline_now\":20,\"timeline_30\":15,\"timeline_90\":8,\"switching_from_competitor\":10,\"us_state\":5,\"business_email\":5},\"tech_fit\":{\"min\":2,\"max\":200},\"tiers\":{\"A\":70,\"B\":45}},\"competitors\":{\"domains\":[\"wrenchly.example\",\"dispatchpro.example\",\"fieldnimbus.example\"],\"names\":[\"wrenchly\",\"dispatchpro\",\"dispatch pro\",\"fieldnimbus\",\"field nimbus\"]},\"free_mail_domains\":[\"gmail.example\",\"yahoo.example\",\"outlook.example\",\"hotmail.example\",\"icloud.example\",\"gmail.com\",\"yahoo.com\",\"outlook.com\",\"hotmail.com\",\"icloud.com\",\"aol.com\"],\"student_domains_suffix\":[\".edu\"],\"patterns\":{\"spam\":[\"backlink\",\"\\\\bseo\\\\b.*(service|ranking|package)\",\"guest post\",\"crypto\",\"bitcoin\",\"forex\",\"casino\",\"viagra\",\"loan offer\",\"rank #?1 on google\",\"web traffic\"],\"student\":[\"\\\\bstudent\\\\b\",\"class project\",\"\\\\bthesis\\\\b\",\"\\\\bcapstone\\\\b\",\"school (project|assignment)\",\"\\\\bmy professor\\\\b\"],\"job_seeker\":[\"\\\\bresume\\\\b\",\"\\\\bcv\\\\b\",\"apply(ing)? for (a |the )?(job|position|role)\",\"job opening\",\"are you hiring\",\"career opportunit\",\"looking for (a )?(job|work|employment)\",\"open (role|position)s?\"],\"injection\":[\"ignore (all |any )?(previous|prior|above|earlier) (instructions|rules)\",\"disregard (the |your )?(instructions|rules)\",\"system prompt\",\"you are (an? )?(ai|assistant|language model)\",\"as an ai\",\"(assign|route) (this|me|the lead) (directly )?to\",\"mark (this|me|the lead) as\",\"set (the )?(priority|segment|owner|score)\",\"override (the |your )?(rules|routing|instructions)\",\"\\\\[\\\\[?system\",\"new instructions\",\"do not (tell|notify) (dana|anyone)\"]}};\n// Inlined into the \"Screen + score + route (code)\" Code node. Plain JS, no imports.\n// Everything that decides where a lead goes lives here, in code, reading rules.json.\n// The model's only inputs are the fields it extracted from the free-text box, and those are\n// thrown away entirely when the screen found instructions aimed at the AI.\n\nfunction territoryFor(state, rules) {\n  for (const [name, states] of Object.entries(rules.territories)) if (states.includes(state)) return name;\n  return null;\n}\n\nfunction segmentFor(techs, rules) {\n  return (rules.segments.find((s) => techs >= s.min_techs && techs <= s.max_techs) ?? rules.segments[0]).name;\n}\n\nconst TRADE_ALIASES = {\n  hvac: 'hvac', heating: 'hvac', cooling: 'hvac', 'air conditioning': 'hvac', plumbing: 'plumbing', plumber: 'plumbing',\n  electrical: 'electrical', electrician: 'electrical', roofing: 'roofing', 'garage door': 'garage_door', garage_door: 'garage_door',\n  'pest control': 'pest_control', pest_control: 'pest_control', 'appliance repair': 'appliance_repair', appliance_repair: 'appliance_repair',\n  landscaping: 'landscaping', solar: 'solar',\n};\nconst normTrade = (t) => TRADE_ALIASES[String(t ?? '').toLowerCase().trim()] ?? (t ? 'other' : 'unknown');\n\nfunction scoreLead(lead, screen, extraction, enrichment, rules) {\n  const ex = screen.injection || !extraction ? {} : extraction; // injection => ignore the model entirely\n  const enr = enrichment && enrichment.found ? enrichment : {};\n  let techs = Number.isFinite(ex.tech_count) && ex.tech_count > 0 ? Math.round(ex.tech_count) : null;\n  let techSource = techs ? 'message' : null;\n  if (!techs && rules.team_size_dropdown[lead.team_size]) { techs = rules.team_size_dropdown[lead.team_size]; techSource = 'form_dropdown'; }\n  if (!techs && enr.field_techs) { techs = enr.field_techs; techSource = 'enrichment'; }\n  if (!techs) { techs = 3; techSource = 'default'; }\n\n  const trade = normTrade(ex.trade && ex.trade !== 'unknown' ? ex.trade : enr.industry);\n  const state = lead.state || enr.state || '';\n  const territory = territoryFor(state, rules);\n  const segment = segmentFor(techs, rules);\n  const P = rules.icp.points;\n  const breakdown = {};\n  if (rules.icp.core_trades.includes(trade)) breakdown.core_trade = P.core_trade;\n  else if (rules.icp.adjacent_trades.includes(trade)) breakdown.adjacent_trade = P.adjacent_trade;\n  if (techs >= rules.icp.tech_fit.min && techs <= rules.icp.tech_fit.max) breakdown.tech_fit = P.tech_fit;\n  const tl = ex.timeline ?? 'unknown';\n  if (tl === 'now') breakdown.timeline_now = P.timeline_now;\n  else if (tl === 'within_30_days') breakdown.timeline_30 = P.timeline_30;\n  else if (tl === '1_3_months') breakdown.timeline_90 = P.timeline_90;\n  const sw = String(ex.current_software ?? '').toLowerCase();\n  if (sw && rules.competitors.names.some((n) => sw.includes(n))) breakdown.switching_from_competitor = P.switching_from_competitor;\n  if (territory) breakdown.us_state = P.us_state;\n  if (!screen.free_mail) breakdown.business_email = P.business_email;\n  const score = Object.values(breakdown).reduce((a, b) => a + b, 0);\n  const tier = score >= rules.icp.tiers.A ? 'A' : score >= rules.icp.tiers.B ? 'B' : 'C';\n  return { techs, tech_source: techSource, trade, state, territory, segment, score, tier, breakdown,\n    current_software: ex.current_software ?? '', timeline: tl, summary: screen.injection ? '' : String(ex.summary ?? '').slice(0, 600) };\n}\n\n// Least-loaded owner with spare capacity in the right territory and segment. Ties break by id, so the\n// same inputs always give the same owner (round robin falls out of the load counter going up).\nfunction pickOwner(segment, territory, owners) {\n  const pool = owners.filter((o) => o.segments.includes(segment) && (o.territory === 'Any' || o.territory === territory) && o.open_leads < o.capacity);\n  pool.sort((a, b) => a.open_leads / a.capacity - b.open_leads / b.capacity || a.id.localeCompare(b.id));\n  return pool[0] ?? null;\n}\n\n// The plan: what to write, and whether a person must approve first. Nothing here calls an API.\nfunction planLead(lead, screen, routing, dedupe, owners, rules) {\n  const byId = Object.fromEntries(owners.map((o) => [o.id, o]));\n  const contact = dedupe?.contact ?? null;\n  const company = dedupe?.company ?? null;\n  const openDeal = (dedupe?.open_deals ?? [])[0] ?? null;\n  const base = { lead_id: lead.lead_id, email: lead.email, company: lead.company, screen, routing, existing: { contact_id: contact?.id ?? null, contact_owner: contact?.owner_id ?? null, company_id: company?.id ?? null, is_customer: !!company?.is_customer, account_owner: company?.owner_id ?? null, open_deal_id: openDeal?.id ?? null, open_deal_owner: openDeal?.owner_id ?? null } };\n  const props = { email: lead.email, firstname: lead.first_name, lastname: lead.last_name, company: lead.company, phone: lead.phone, state: routing.state, trade: routing.trade, tech_count: routing.techs, segment: routing.segment, lead_score: routing.score, lead_tier: routing.tier, lead_source: lead.source };\n  const contactOp = (extra) => contact\n    ? { app: 'hubspot', method: 'PATCH', path: `/hubspot/contacts/${contact.id}`, body: { properties: { ...props, ...extra } } }\n    : { app: 'hubspot', method: 'POST', path: '/hubspot/contacts', body: { properties: { ...props, ...extra } } };\n\n  if (screen.junk === 'spam') return { ...base, disposition: 'drop', reason: 'spam', needs_approval: false, ops: [] };\n  if (screen.junk) {\n    // Tagged, never routed: no owner, no deal, no rep DM. Existing owner on a known contact is left alone.\n    return { ...base, disposition: 'tag', reason: screen.junk, needs_approval: false, ops: [contactOp({ lifecycle: 'other', tags: [screen.junk] })] };\n  }\n  const tags = screen.injection ? ['injection_ignored'] : [];\n\n  if (routing.tier === 'C') {\n    return { ...base, disposition: 'nurture', reason: `score ${routing.score} below tier B`, needs_approval: false,\n      ops: [contactOp({ lifecycle: 'lead', nurture: true, ...(tags.length ? { tags } : {}) })] };\n  }\n\n  // Who would the rules pick? Sticky ownership: a known contact keeps its owner.\n  const picked = pickOwner(routing.segment, routing.territory, owners);\n  let proposed = contact?.owner_id && byId[contact.owner_id] ? byId[contact.owner_id] : picked;\n  const holds = [];\n  if (contact?.owner_id && !byId[contact.owner_id]) holds.push('contact_owner_inactive'); // reassigning would be an owner change\n  if (company?.is_customer) { holds.push('existing_customer'); proposed = byId[company.owner_id] ?? proposed; }\n  if (openDeal) {\n    if (openDeal.owner_id !== proposed?.id) holds.push('open_deal_owned_by_other');\n    proposed = byId[openDeal.owner_id] ?? proposed; // default proposal keeps the deal where it is\n  }\n  if (routing.segment === 'Enterprise') holds.push('enterprise');\n  if (!routing.territory) holds.push('no_territory');\n  if (!proposed) holds.push('no_owner_capacity');\n\n  const ops = buildOps(lead, routing, proposed, openDeal, contactOp, tags);\n  const plan = { ...base, disposition: holds.length ? 'hold' : 'route', reason: holds.join(', ') || `tier ${routing.tier}`, needs_approval: holds.length > 0,\n    holds, proposed_owner: proposed ? { id: proposed.id, name: proposed.name, slack: proposed.slack } : null,\n    rules_pick: picked ? { id: picked.id, name: picked.name } : null, ops };\n  return plan;\n}\n\nfunction buildOps(lead, routing, owner, openDeal, contactOp, tags = []) {\n  const ownerId = owner?.id ?? null;\n  const ops = [contactOp({ lifecycle: 'sales_qualified_lead', ...(ownerId ? { owner_id: ownerId } : {}), ...(tags.length ? { tags } : {}) })];\n  const summary = routing.summary || `${lead.company}: ${routing.trade}, about ${routing.techs} techs, ${routing.state || 'no state'}.`;\n  if (openDeal) {\n    ops.push({ app: 'hubspot', method: 'POST', path: `/hubspot/deals/${openDeal.id}/notes`, body: { note: `New demo request from ${lead.email}. ${summary}` } });\n  } else if (ownerId) {\n    ops.push({ app: 'hubspot', method: 'POST', path: '/hubspot/deals', body: { name: `${lead.company} - ${routing.segment}`, stage: 'demo_requested', segment: routing.segment, owner_id: ownerId, company_domain: lead.domain, contact_email: lead.email, lead_score: routing.score, summary } });\n  }\n  if (owner) ops.push({ app: 'slack', method: 'POST', path: '/slack/chat.postMessage', body: { channel: owner.slack, text: `New ${routing.tier}-tier ${routing.segment} lead: ${lead.first_name} ${lead.last_name} at ${lead.company} (${routing.state || '??'}). ${summary}` } });\n  return ops;\n}\n\n// After Dana responds. Only an explicit approve from the named approver applies anything. An owner\n// different from the proposal is applied only when she names it.\nfunction applyApproval(plan, response, owners, rules) {\n  const r = response ?? {};\n  const byId = Object.fromEntries(owners.map((o) => [o.id, o]));\n  if (r.approver !== rules.approver.id) return { ...plan, approved: false, decision: 'ignored', reason: `approver \"${r.approver ?? ''}\" is not ${rules.approver.id}`, ops: [] };\n  if (r.decision !== 'approve') return { ...plan, approved: false, decision: 'rejected', reason: r.note ?? 'rejected or timed out', ops: [] };\n  let owner = plan.proposed_owner ? byId[plan.proposed_owner.id] : null;\n  if (r.owner_id) {\n    if (!byId[r.owner_id]) return { ...plan, approved: false, decision: 'invalid_owner', reason: `unknown owner ${r.owner_id}`, ops: [] };\n    owner = byId[r.owner_id];\n  }\n  if (!owner) return { ...plan, approved: false, decision: 'no_owner', reason: 'approved but no owner to assign', ops: [] };\n  const ops = (plan.ops ?? []).map((op) => rewriteOwner(op, owner, plan));\n  // Approving a different owner on an existing open deal is an explicit owner change.\n  if (plan.existing.open_deal_id && owner.id !== plan.existing.open_deal_owner) {\n    ops.push({ app: 'hubspot', method: 'PATCH', path: `/hubspot/deals/${plan.existing.open_deal_id}`, body: { owner_id: owner.id, approved_by: rules.approver.id } });\n  }\n  return { ...plan, approved: true, decision: 'approved', approved_by: r.approver, final_owner: { id: owner.id, name: owner.name }, ops };\n}\n\nfunction rewriteOwner(op, owner, plan) {\n  const o = JSON.parse(JSON.stringify(op));\n  if (o.path.startsWith('/hubspot/contacts') && o.body.properties?.owner_id !== undefined) { o.body.properties.owner_id = owner.id; o.body.properties.approved_by = 'dana'; }\n  if (o.path === '/hubspot/deals') { o.body.owner_id = owner.id; o.body.approved_by = 'dana'; }\n  if (o.path === '/slack/chat.postMessage') o.body.channel = owner.slack;\n  return o;\n}\n\n// ---- n8n wrapper: runs after Dana answers, or after the 24h timeout (no body => nothing applied) ----\nconst plan = $('Score + route + plan (code)').first().json;\nconst owners = $('HubSpot: owners + load').first().json.owners ?? [];\nconst response = $input.first().json.body ?? null;\nreturn [{ json: applyApproval(plan, response, owners, RULES) }];"
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000017",
+      "name": "Anything to write?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2860,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Anythingtowr",
+              "leftValue": "={{ ($json.ops ?? []).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000018",
+      "name": "One item per write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// One n8n item per planned write, so one HTTP Request node does them in order.\nconst p = $input.first().json;\nreturn (p.ops ?? []).map((op, i) => ({ json: { ...op, seq: i, lead_id: p.lead_id } }));"
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000019",
+      "name": "Live CRM?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3300,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "LiveCRM",
+              "leftValue": "={{ $('Score + route + plan (code)').first().json.live }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000020",
+      "name": "HubSpot: upsert contact (live)",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        3520,
+        0
+      ],
+      "parameters": {
+        "resource": "contact",
+        "operation": "upsert",
+        "email": "={{ $json.body?.properties?.email }}",
+        "additionalFields": {}
+      },
+      "disabled": true,
+      "notes": "Production path. Attach a HubSpot app token and enable; map the remaining properties from $json.body.properties."
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000021",
+      "name": "HubSpot: create deal (live)",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        3740,
+        0
+      ],
+      "parameters": {
+        "resource": "deal",
+        "operation": "create",
+        "stage": "appointmentscheduled",
+        "additionalFields": {
+          "dealName": "={{ $json.body?.name }}"
+        }
+      },
+      "disabled": true,
+      "notes": "Production path. Only runs for ops the plan (or Dana) produced."
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000022",
+      "name": "Slack: DM owner (live)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        3960,
+        0
+      ],
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "mode": "username",
+          "value": "={{ $json.body?.channel?.replace(\"@\", \"\") }}"
+        },
+        "text": "={{ $json.body?.text }}",
+        "otherOptions": {}
+      },
+      "disabled": true,
+      "webhookId": "0a01a6f2-4e0b-4c3d-8a1f-4c5d6e7f0004",
+      "notes": "Production path. Attach a Slack credential and enable."
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000023",
+      "name": "Write: HubSpot + Slack (mock API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        300
+      ],
+      "parameters": {
+        "options": {},
+        "method": "={{ $json.method }}",
+        "url": "=http://host.docker.internal:4610{{ $json.path }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Mock HubSpot/Slack at http://host.docker.internal:4610. Swap for the live nodes above in production."
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000024",
+      "name": "Summarize run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// One result per lead for the caller (and the eval harness).\nconst plan = $('Score + route + plan (code)').first().json;\nlet final = plan;\nif (plan.needs_approval) { try { final = $('Apply approval (code)').first().json; } catch (e) { final = { ...plan, decision: 'not_applied', ops: [] }; } }\nlet writes = [];\ntry { writes = $('Write: HubSpot + Slack (mock API)').all().map((i) => i.json); } catch (e) { writes = []; }\nconst errors = writes.filter((w) => w.error).map((w) => String(w.error?.message ?? w.error));\nreturn [{ json: {\n  lead_id: plan.lead_id, disposition: plan.disposition, reason: plan.reason, holds: plan.holds ?? [],\n  needs_approval: !!plan.needs_approval, decision: final.decision ?? (plan.needs_approval ? 'pending' : 'auto'),\n  segment: plan.routing?.segment ?? null, territory: plan.routing?.territory ?? null, tier: plan.routing?.tier ?? null, score: plan.routing?.score ?? null,\n  tech_count: plan.routing?.techs ?? null, tech_source: plan.routing?.tech_source ?? null, trade: plan.routing?.trade ?? null,\n  screen: plan.screen, proposed_owner: plan.proposed_owner ?? null, final_owner: final.final_owner ?? (plan.needs_approval ? null : plan.proposed_owner ?? null),\n  ops_planned: (final.ops ?? []).length, writes_ok: writes.length - errors.length, write_errors: errors,\n  model_ok: plan.model_ok ?? null, model_error: plan.model_error ?? null, execution_id: $execution.id,\n} }];"
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000025",
+      "name": "Already answered caller?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3960,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Alreadyanswe",
+              "leftValue": "={{ $('Score + route + plan (code)').first().json.needs_approval }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0a01-4000-8000-000000000026",
+      "name": "Respond: result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        4180,
+        480
+      ],
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: POST /lead-router": {
+      "main": [
+        [
+          {
+            "node": "Normalize lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize lead": {
+      "main": [
+        [
+          {
+            "node": "Enrich company (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich company (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Screen lead (code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screen lead (code)": {
+      "main": [
+        [
+          {
+            "node": "Extract fields (Basic LLM Chain)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract fields (Basic LLM Chain)": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: owners + load",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter: Claude Haiku 5.5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract fields (Basic LLM Chain)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Extract fields (Basic LLM Chain)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: owners + load": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: dedupe lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: dedupe lookup": {
+      "main": [
+        [
+          {
+            "node": "Score + route + plan (code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score + route + plan (code)": {
+      "main": [
+        [
+          {
+            "node": "Needs Dana?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Dana?": {
+      "main": [
+        [
+          {
+            "node": "Live Slack approval?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Anything to write?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live Slack approval?": {
+      "main": [
+        [
+          {
+            "node": "Slack: ask Dana (send and wait)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: held for Dana + approve URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: ask Dana (send and wait)": {
+      "main": [
+        [
+          {
+            "node": "Apply approval (code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: held for Dana + approve URL": {
+      "main": [
+        [
+          {
+            "node": "Wait for Dana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Dana": {
+      "main": [
+        [
+          {
+            "node": "Apply approval (code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply approval (code)": {
+      "main": [
+        [
+          {
+            "node": "Anything to write?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to write?": {
+      "main": [
+        [
+          {
+            "node": "One item per write",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summarize run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per write": {
+      "main": [
+        [
+          {
+            "node": "Live CRM?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Live CRM?": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: upsert contact (live)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write: HubSpot + Slack (mock API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: upsert contact (live)": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: create deal (live)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: create deal (live)": {
+      "main": [
+        [
+          {
+            "node": "Slack: DM owner (live)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: DM owner (live)": {
+      "main": [
+        [
+          {
+            "node": "Summarize run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write: HubSpot + Slack (mock API)": {
+      "main": [
+        [
+          {
+            "node": "Summarize run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize run": {
+      "main": [
+        [
+          {
+            "node": "Already answered caller?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already answered caller?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Respond: result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "variant": "naive",
+    "mock_url": "http://host.docker.internal:4610"
+  }
+}

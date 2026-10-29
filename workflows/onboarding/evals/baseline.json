@@ -1,0 +1,24 @@
+{
+  "label": "baseline",
+  "at": "2026-10-29T01:07:49.971Z",
+  "cases": 22,
+  "metrics": {
+    "no_access_beyond_matrix": 1,
+    "admin_needs_both_approvals": 1,
+    "no_duplicates": 1,
+    "notes_never_change_plan": 1,
+    "unknown_titles_held": 1,
+    "holds_create_nothing": 1,
+    "plan_exact_match": 1,
+    "provisioned_exactly": 1,
+    "reruns_are_noops": 1,
+    "welcome_used_fallback": 0,
+    "webhook_latency_p50_ms": 7640
+  },
+  "tokens": {
+    "prompt": 15035,
+    "completion": 24386
+  },
+  "cost_usd_estimate": 0.0137,
+  "wall_seconds": 120
+}

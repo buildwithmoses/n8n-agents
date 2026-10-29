@@ -1,0 +1,109 @@
+{
+  "_about": "Fernhill Software role-to-access matrix (fictional). Owned by Lena Hart (People Ops) and Sam Okafor (IT). Code reads this; the model never does. Least privilege: a title gets exactly what is listed here and nothing else. A title that is not listed is held for a human.",
+  "domain": "fernhill.example",
+  "baseline": {
+    "google_groups": ["all@fernhill.example"],
+    "slack_channels": ["#general", "#announcements"]
+  },
+  "employee_only": {
+    "google_groups": ["benefits@fernhill.example"],
+    "slack_channels": ["#people-news"]
+  },
+  "contractor": {
+    "google_groups": ["contractors@fernhill.example"],
+    "max_months": 12
+  },
+  "restricted_groups": ["finance@fernhill.example", "hr-confidential@fernhill.example", "benefits@fernhill.example"],
+  "laptops": { "standard": "MacBook Air 13 (16GB)", "pro": "MacBook Pro 14 (32GB)" },
+  "roles": {
+    "Account Executive": {
+      "department": "Sales",
+      "google_groups": ["sales@fernhill.example"],
+      "slack_channels": ["#sales", "#deals"],
+      "github_teams": [],
+      "seats": [{ "app": "hubspot", "role": "sales-pro" }],
+      "laptop": "standard"
+    },
+    "Sales Development Representative": {
+      "department": "Sales",
+      "google_groups": ["sales@fernhill.example"],
+      "slack_channels": ["#sales"],
+      "github_teams": [],
+      "seats": [{ "app": "hubspot", "role": "sales-starter" }],
+      "laptop": "standard"
+    },
+    "Customer Support Specialist": {
+      "department": "Support",
+      "google_groups": ["support@fernhill.example"],
+      "slack_channels": ["#support", "#support-escalations"],
+      "github_teams": [],
+      "seats": [{ "app": "zendesk", "role": "agent" }, { "app": "linear", "role": "guest" }],
+      "laptop": "standard"
+    },
+    "Support Team Lead": {
+      "department": "Support",
+      "google_groups": ["support@fernhill.example", "support-leads@fernhill.example"],
+      "slack_channels": ["#support", "#support-escalations", "#support-leads"],
+      "github_teams": [],
+      "seats": [{ "app": "zendesk", "role": "admin", "privileged": true }, { "app": "linear", "role": "member" }],
+      "laptop": "standard"
+    },
+    "Software Engineer": {
+      "department": "Engineering",
+      "google_groups": ["engineering@fernhill.example"],
+      "slack_channels": ["#eng", "#deploys"],
+      "github_teams": [{ "team": "engineers", "role": "member" }],
+      "seats": [{ "app": "linear", "role": "member" }],
+      "laptop": "pro"
+    },
+    "Site Reliability Engineer": {
+      "department": "Engineering",
+      "google_groups": ["engineering@fernhill.example", "oncall@fernhill.example"],
+      "slack_channels": ["#eng", "#deploys", "#incidents"],
+      "github_teams": [{ "team": "engineers", "role": "member" }, { "team": "prod-deploy", "role": "member", "privileged": true }],
+      "seats": [{ "app": "linear", "role": "member" }],
+      "laptop": "pro"
+    },
+    "Product Designer": {
+      "department": "Product",
+      "google_groups": ["product@fernhill.example"],
+      "slack_channels": ["#product", "#design"],
+      "github_teams": [],
+      "seats": [{ "app": "linear", "role": "member" }],
+      "laptop": "pro"
+    },
+    "Staff Accountant": {
+      "department": "Finance",
+      "google_groups": ["finance@fernhill.example"],
+      "slack_channels": ["#finance"],
+      "github_teams": [],
+      "seats": [],
+      "laptop": "standard"
+    },
+    "People Operations Coordinator": {
+      "department": "People",
+      "google_groups": ["people@fernhill.example", "hr-confidential@fernhill.example"],
+      "slack_channels": ["#people"],
+      "github_teams": [],
+      "seats": [],
+      "laptop": "standard"
+    },
+    "Marketing Manager": {
+      "department": "Marketing",
+      "google_groups": ["marketing@fernhill.example"],
+      "slack_channels": ["#marketing"],
+      "github_teams": [],
+      "seats": [{ "app": "hubspot", "role": "marketing-hub" }],
+      "laptop": "standard"
+    },
+    "IT Administrator": {
+      "department": "IT",
+      "google_groups": ["it@fernhill.example"],
+      "slack_channels": ["#it", "#incidents"],
+      "github_teams": [{ "team": "it", "role": "member" }],
+      "seats": [{ "app": "linear", "role": "member" }],
+      "google_admin_role": "_USER_MANAGEMENT_ADMIN",
+      "laptop": "pro"
+    }
+  }
+}

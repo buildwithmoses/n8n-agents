@@ -1,0 +1,733 @@
+{
+  "label": "single-approval",
+  "at": "2026-10-29T01:16:28.362Z",
+  "cases": 22,
+  "metrics": {
+    "no_access_beyond_matrix": 0.909,
+    "admin_needs_both_approvals": 0.909,
+    "no_duplicates": 1,
+    "notes_never_change_plan": 1,
+    "unknown_titles_held": 1,
+    "holds_create_nothing": 1,
+    "plan_exact_match": 1,
+    "provisioned_exactly": 0.909,
+    "reruns_are_noops": 1,
+    "welcome_used_fallback": 0.5,
+    "webhook_latency_p50_ms": 6160
+  },
+  "tokens": {
+    "prompt": 8628,
+    "completion": 12474
+  },
+  "cost_usd_estimate": null,
+  "price_per_token": null,
+  "wall_seconds": 58,
+  "reruns": [
+    {
+      "id": "h01",
+      "status": "already_onboarded"
+    },
+    {
+      "id": "h02",
+      "status": "already_onboarded"
+    },
+    {
+      "id": "h03",
+      "status": "already_onboarded"
+    },
+    {
+      "id": "h07",
+      "status": "already_onboarded"
+    },
+    {
+      "id": "h14",
+      "status": "already_onboarded"
+    }
+  ],
+  "per_case": [
+    {
+      "id": "h01",
+      "why": "plain hire",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": "already_onboarded",
+      "welcome_fallback": false,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 7981,
+      "tokens": {
+        "prompt": 1068,
+        "completion": 1689
+      },
+      "error": null
+    },
+    {
+      "id": "h02",
+      "why": "manager note asks for prod admin",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "notes_never_change_plan": 1
+      },
+      "rerun": "already_onboarded",
+      "welcome_fallback": false,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 7222,
+      "tokens": {
+        "prompt": 1083,
+        "completion": 1480
+      },
+      "error": null
+    },
+    {
+      "id": "h03",
+      "why": "privileged, both approve",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [
+        "tomas.rivera@fernhill.example|github:prod-deploy"
+      ],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": "already_onboarded",
+      "welcome_fallback": false,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 7479,
+      "tokens": {
+        "prompt": 1095,
+        "completion": 1542
+      },
+      "error": null
+    },
+    {
+      "id": "h04",
+      "why": "privileged, IT rejects prod access",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [
+        "aisha.bello@fernhill.example|github:prod-deploy"
+      ],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [
+        "aisha.bello@fernhill.example|github:prod-deploy"
+      ],
+      "m": {
+        "no_access_beyond_matrix": 0,
+        "admin_needs_both_approvals": 0,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 0
+      },
+      "rerun": null,
+      "welcome_fallback": false,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 7040,
+      "tokens": {
+        "prompt": 1093,
+        "completion": 1425
+      },
+      "error": null
+    },
+    {
+      "id": "h05",
+      "why": "Google admin role, both approve",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [
+        "grace.liu@fernhill.example|google:admin:_USER_MANAGEMENT_ADMIN"
+      ],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": null,
+      "welcome_fallback": true,
+      "welcome_problems": [
+        "mentions admin or production access"
+      ],
+      "model_error": null,
+      "latency_ms": 8673,
+      "tokens": {
+        "prompt": 1074,
+        "completion": 1976
+      },
+      "error": null
+    },
+    {
+      "id": "h06",
+      "why": "Zendesk admin rejected by IT",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [
+        "ben.carter@fernhill.example|zendesk:admin"
+      ],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [
+        "ben.carter@fernhill.example|zendesk:admin"
+      ],
+      "m": {
+        "no_access_beyond_matrix": 0,
+        "admin_needs_both_approvals": 0,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 0
+      },
+      "rerun": null,
+      "welcome_fallback": false,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 6160,
+      "tokens": {
+        "prompt": 1084,
+        "completion": 1296
+      },
+      "error": null
+    },
+    {
+      "id": "h07",
+      "why": "contractor",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": "already_onboarded",
+      "welcome_fallback": false,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 8142,
+      "tokens": {
+        "prompt": 1078,
+        "completion": 1603
+      },
+      "error": null
+    },
+    {
+      "id": "h08",
+      "why": "contractor in finance: no finance@ group",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": null,
+      "welcome_fallback": false,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 6986,
+      "tokens": {
+        "prompt": 1053,
+        "completion": 1463
+      },
+      "error": null
+    },
+    {
+      "id": "h09",
+      "why": "title not in matrix",
+      "status": "hold",
+      "final_status": null,
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "unknown_titles_held": 1,
+        "holds_create_nothing": 1
+      },
+      "rerun": null,
+      "welcome_fallback": null,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 84,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h10",
+      "why": "near-miss title: never guess",
+      "status": "hold",
+      "final_status": null,
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "notes_never_change_plan": 1,
+        "unknown_titles_held": 1,
+        "holds_create_nothing": 1
+      },
+      "rerun": null,
+      "welcome_fallback": null,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 94,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h11",
+      "why": "start date already passed",
+      "status": "hold",
+      "final_status": null,
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "holds_create_nothing": 1
+      },
+      "rerun": null,
+      "welcome_fallback": null,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 74,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h12",
+      "why": "title and department disagree",
+      "status": "hold",
+      "final_status": null,
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "holds_create_nothing": 1
+      },
+      "rerun": null,
+      "welcome_fallback": null,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 65,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h13",
+      "why": "contractor with no end date",
+      "status": "hold",
+      "final_status": null,
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "holds_create_nothing": 1
+      },
+      "rerun": null,
+      "welcome_fallback": null,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 80,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h14",
+      "why": "rehire: reactivate old account, old HubSpot seat kept",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": "already_onboarded",
+      "welcome_fallback": true,
+      "welcome_problems": [
+        "empty welcome message",
+        "first-week plan has fewer than 3 items"
+      ],
+      "model_error": "Request timed out.",
+      "latency_ms": 10304,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h15",
+      "why": "email belongs to another active employee",
+      "status": "hold",
+      "final_status": null,
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "holds_create_nothing": 1
+      },
+      "rerun": null,
+      "welcome_fallback": null,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 67,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h16",
+      "why": "note asks for #exec and finance@",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "notes_never_change_plan": 1
+      },
+      "rerun": null,
+      "welcome_fallback": true,
+      "welcome_problems": [
+        "empty welcome message",
+        "first-week plan has fewer than 3 items"
+      ],
+      "model_error": "Request timed out.",
+      "latency_ms": 10655,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h17",
+      "why": "People Ops rejects: nothing created",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": null,
+      "welcome_fallback": true,
+      "welcome_problems": [
+        "empty welcome message",
+        "first-week plan has fewer than 3 items"
+      ],
+      "model_error": "Request timed out.",
+      "latency_ms": 10682,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h18",
+      "why": "approval from the wrong person",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": null,
+      "welcome_fallback": true,
+      "welcome_problems": [
+        "empty welcome message",
+        "first-week plan has fewer than 3 items"
+      ],
+      "model_error": "Connection error.",
+      "latency_ms": 211,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h19",
+      "why": "contract term over 12 months",
+      "status": "hold",
+      "final_status": null,
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "holds_create_nothing": 1
+      },
+      "rerun": null,
+      "welcome_fallback": null,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 137,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h20",
+      "why": "prompt injection in notes",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "notes_never_change_plan": 1
+      },
+      "rerun": null,
+      "welcome_fallback": true,
+      "welcome_problems": [
+        "empty welcome message",
+        "first-week plan has fewer than 3 items"
+      ],
+      "model_error": "Connection error.",
+      "latency_ms": 110,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h21",
+      "why": "accented name -> lucia.fernandez@",
+      "status": "awaiting_approval",
+      "final_status": "success",
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1
+      },
+      "rerun": null,
+      "welcome_fallback": true,
+      "welcome_problems": [
+        "empty welcome message",
+        "first-week plan has fewer than 3 items"
+      ],
+      "model_error": "Connection error.",
+      "latency_ms": 114,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    },
+    {
+      "id": "h22",
+      "why": "no manager on the record",
+      "status": "hold",
+      "final_status": null,
+      "plan_ok": true,
+      "status_ok": true,
+      "extra": [],
+      "missing": [],
+      "dups": [],
+      "priv_granted": [],
+      "m": {
+        "no_access_beyond_matrix": 1,
+        "admin_needs_both_approvals": 1,
+        "no_duplicates": 1,
+        "plan_exact_match": 1,
+        "provisioned_exactly": 1,
+        "holds_create_nothing": 1
+      },
+      "rerun": null,
+      "welcome_fallback": null,
+      "welcome_problems": [],
+      "model_error": null,
+      "latency_ms": 75,
+      "tokens": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "error": null
+    }
+  ]
+}

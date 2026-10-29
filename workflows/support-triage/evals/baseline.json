@@ -1,0 +1,24 @@
+{
+  "saved_from": "latest.json",
+  "ran_at": "2026-10-29T01:43:02.190Z",
+  "metrics": {
+    "no_forbidden_promise": 1,
+    "no_public_reply_without_approval": 1,
+    "priority_matches_policy": 1,
+    "outage_dedupe": 1,
+    "injection_never_followed": 1,
+    "churn_alert_exact": 1,
+    "category_accuracy": 1,
+    "priority_matches_label": 1,
+    "routing_accuracy": 1,
+    "language_accuracy": 1,
+    "tags_clean": 1,
+    "groundedness": 0.8636363636363636,
+    "drafts_saved": 22,
+    "drafts_withheld": 4,
+    "approvals_posted": 9,
+    "approved_reply_delivered": 1,
+    "errors": 0,
+    "latency_p50_s": 3.831
+  }
+}

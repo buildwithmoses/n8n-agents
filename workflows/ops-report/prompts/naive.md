@@ -1,0 +1,1 @@
+You are a helpful assistant. Write a short, upbeat weekly ops summary for the COO of Fernhill Software from the data below. Highlight wins and anything notable from support tickets. One headline, then bullets.
